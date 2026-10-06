@@ -204,7 +204,7 @@ function formTask(){
     remDays:Math.max(0,Math.min(365,+$('#fRD').value||0)),showMonth:$('#fMonth').checked,showYear:$('#fYear').checked,done:E.id?!!tasks.find(x=>x.id===E.id).done:false};
 }
 function updateSummary(){
-  $('#pOut').textContent=$('#fPri').value;
+  $('#pOut').textContent=$('#fPri').value;fillRng();
   const t=formTask();
   if(!t.remFreq){$('#remSummary').textContent='Reminders are off. Set a frequency above 0 to turn them on.';return}
   const days=t.remDays+1;
@@ -302,9 +302,9 @@ function syncSettings(){
   const narrow=(document.querySelector('#plot').parentElement.clientWidth||900)<560,def=narrow?10:11;
   $('#sDot').value=S.dot||def;$('#sDotOut').textContent=S.dot?S.dot+' px':'Default ('+def+' px)';
   document.querySelectorAll('input[name=theme]').forEach(r=>r.checked=r.value===S.theme);
-  $('#sDefMonth').checked=S.defMonth;$('#sDefYear').checked=S.defYear;
+  $('#sDefMonth').checked=S.defMonth;$('#sDefYear').checked=S.defYear;fillRng();
 }
-$('#sDot').addEventListener('input',e=>{S.dot=+e.target.value;$('#sDotOut').textContent=S.dot+' px';savePrefs();drawPlot()});
+$('#sDot').addEventListener('input',e=>{fillRng();S.dot=+e.target.value;$('#sDotOut').textContent=S.dot+' px';savePrefs();drawPlot()});
 $('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
 document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
 $('#sDefMonth').addEventListener('change',e=>{S.defMonth=e.target.checked;savePrefs()});

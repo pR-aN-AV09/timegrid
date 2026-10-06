@@ -183,3 +183,15 @@ legend{font-weight:600;padding:0 6px;font-size:14px}
 .modal{min-width:0}
 .row.nowrap input[type=range]{flex:1;min-width:0}
 html,body{overflow-x:hidden}
+
+.row.nowrap .rng{flex:1;min-width:0}
+.prio .rng{margin-top:6px}
+fieldset{min-width:0}
+.g2>*,.g3>*{min-width:0}
+.g2,.g3{grid-template-columns:repeat(var(--cols,2),minmax(0,1fr))}
+.g3{--cols:3}
+.field input[type=time],.field input[type=date],.field input[type=number]{min-width:0}
+@media(max-width:480px){
+  .g3{--cols:2}
+  .g3>.field:first-child{grid-column:1/-1}
+}

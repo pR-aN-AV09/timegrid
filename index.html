@@ -78,7 +78,7 @@
     <div class="tabs" id="tabs"></div>
     <div class="prio">
       <div class="big"><span>Priority</span><output id="pOut">5</output></div>
-      <input type="range" id="fPri" min="1" max="10" step="1" value="5" aria-label="Priority">
+      <div class="rng" data-n="10"><div class="trk"></div><div class="fill"></div><div class="stops"></div><input type="range" id="fPri" min="1" max="10" step="1" value="5" aria-label="Priority"></div>
       <div class="ticks"><span>1 low</span><span>10 urgent</span></div>
     </div>
     <div class="field"><label for="fTitle">Task</label><input type="text" id="fTitle" placeholder="What needs to get done?"></div>
@@ -122,7 +122,7 @@
     <section class="sset">
       <h4>Dot size</h4>
       <p class="hint">Size of the dots on the Hours scale. Days and Months dots shrink from it. Saved on this device only.</p>
-      <div class="row nowrap"><input type="range" id="sDot" min="6" max="16" step="1" aria-label="Dot size"><output id="sDotOut" class="out"></output></div>
+      <div class="row nowrap"><div class="rng" data-n="11"><div class="trk"></div><div class="fill"></div><div class="stops"></div><input type="range" id="sDot" min="6" max="16" step="1" aria-label="Dot size"></div><output id="sDotOut" class="out"></output></div>
       <button class="btn sm" id="sDotReset">Reset to default</button>
     </section>
     <section class="sset">
