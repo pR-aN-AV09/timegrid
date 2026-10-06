@@ -120,10 +120,13 @@
   <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="accTitle">
     <h3 id="accTitle">Settings</h3>
     <section class="sset">
-      <h4>Dot size</h4>
+      <h4>Dots</h4>
       <p class="hint">Size of the dots on the Hours scale. Days and Months dots shrink from it. Saved on this device only.</p>
       <div class="row nowrap"><div class="rng" data-n="11"><div class="trk"></div><div class="fill"></div><div class="stops"></div><input type="range" id="sDot" min="6" max="16" step="1" aria-label="Dot size"></div><output id="sDotOut" class="out"></output></div>
       <button class="btn sm" id="sDotReset">Reset to default</button>
+      <div class="toggles one" style="margin:12px 0 4px">
+        <label class="tgl"><span>Join dots with a line<small>A dotted line through tasks in order of deadline</small></span><input type="checkbox" id="sLine" role="switch" checked><span class="sw"></span></label>
+      </div>
     </section>
     <section class="sset">
       <h4>Notifications</h4>

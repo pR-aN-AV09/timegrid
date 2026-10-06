@@ -195,3 +195,6 @@ fieldset{min-width:0}
   .g3{--cols:2}
   .g3>.field:first-child{grid-column:1/-1}
 }
+
+#plot .link{fill:none;stroke:var(--muted);stroke-opacity:.75;stroke-width:1.4;stroke-dasharray:1 5;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.toggles.one{grid-template-columns:1fr}

@@ -15,10 +15,10 @@ let tasks=ls('tg_tasks',[]);           // includes deleted tombstones (needed fo
 let dirty=new Set(ls('tg_dirty',[]));  // ids waiting to upload
 let fired=ls('tg_fired',{});
 const prefs=ls('tg_prefs',{});
-const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1)};
+const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1)};
 const live=()=>tasks.filter(t=>!t.deleted);
 const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty])};
-const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear});
+const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear,line:S.line});
 function applyTheme(v){const r=document.documentElement;if(v)r.dataset.theme=v;else delete r.dataset.theme}
 applyTheme(S.theme);
 
@@ -94,15 +94,18 @@ function drawPlot(){
   const hidden=inRange.length-inR.length;
   // Dots get smaller as the time scale gets wider: hours > days > months.
   const base=S.dot||(narrow?10:11),rad=[base,Math.max(3,Math.round(base*0.72)),Math.max(3,Math.round(base*0.54))][S.scale],sw=S.scale===2?1.2:2,seen={};
-  let hits='',dots='';
+  let hits='',dots='';const pts=[];
   inR.forEach(t=>{
     const x0=X((taskDate(t)-r.s)/(r.e-r.s)),y0=Y(t.priority),key=Math.round(x0/(rad*2))+'_'+t.priority;
     const n=seen[key]=(seen[key]||0)+1,x=x0+(n-1)*(rad*2-2),cx=Math.min(x,W-M.r-rad);
+    pts.push([cx,y0]);
     // small dots get an invisible larger tap area so they stay easy to press
     if(rad<9)hits+=`<circle data-id="${t.id}" cx="${cx}" cy="${y0}" r="12" fill="transparent" style="cursor:pointer"/>`;
     dots+=`<circle class="dot ${t.done?'done':''}" data-id="${t.id}" cx="${cx}" cy="${y0}" r="${rad}" stroke-width="${sw}" fill="${dotCol(t.priority)}" tabindex="0" role="button"><title>${esc(t.title||'Untitled')} · priority ${t.priority} · ${t.date} ${t.time||''}</title></circle>`;
   });
-  g+=hits+dots;
+  // thin dotted line joining the dots in order of deadline time
+  const link=(S.line&&pts.length>1)?`<path class="link" d="${pts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ')}"/>`:'';
+  g+=link+hits+dots;
   if(!inR.length){
     g+=`<text x="${M.l+pw/2}" y="${M.t+ph/2-6}" text-anchor="middle" style="font-size:13px">Nothing due in this range${S.minPri>1?' at this priority':''}.</text>`;
     g+=`<text x="${M.l+pw/2}" y="${M.t+ph/2+14}" text-anchor="middle" style="font-size:13px">Tap a calendar day to add a task.</text>`;
@@ -302,11 +305,12 @@ function syncSettings(){
   const narrow=(document.querySelector('#plot').parentElement.clientWidth||900)<560,def=narrow?10:11;
   $('#sDot').value=S.dot||def;$('#sDotOut').textContent=S.dot?S.dot+' px':'Default ('+def+' px)';
   document.querySelectorAll('input[name=theme]').forEach(r=>r.checked=r.value===S.theme);
-  $('#sDefMonth').checked=S.defMonth;$('#sDefYear').checked=S.defYear;fillRng();
+  $('#sDefMonth').checked=S.defMonth;$('#sDefYear').checked=S.defYear;$('#sLine').checked=S.line;fillRng();
 }
 $('#sDot').addEventListener('input',e=>{fillRng();S.dot=+e.target.value;$('#sDotOut').textContent=S.dot+' px';savePrefs();drawPlot()});
 $('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
 document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
+$('#sLine').addEventListener('change',e=>{S.line=e.target.checked;savePrefs();drawPlot()});
 $('#sDefMonth').addEventListener('change',e=>{S.defMonth=e.target.checked;savePrefs()});
 $('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePrefs()});
 
