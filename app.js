@@ -44,7 +44,7 @@ const dayTasks=k=>live().filter(t=>t.date===k).sort((a,b)=>(a.time||'').localeCo
 const fmtDate=k=>new Date(k+'T00:00').toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
 /* ================= dashboard ================= */
-const W=900,H=380,M={l:44,r:16,t:16,b:40};
+let W=900,H=380,M={l:44,r:16,t:16,b:40},lastW=0;
 function range(){
   const a=S.anchor,y=a.getFullYear(),m=a.getMonth();
   if(S.scale===0){const s=new Date(y,m,a.getDate()),e=new Date(y,m,a.getDate()+1);return{s,e,label:s.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}}
@@ -53,31 +53,56 @@ function range(){
 }
 function drawPlot(){
   const r=range();$('#dLabel').textContent=r.label;
+  // Draw at the real on-screen width so text and dots keep their true size on phones.
+  const svg=$('#plot');
+  W=Math.max(280,Math.round(svg.parentElement.clientWidth||900));lastW=W;
+  const narrow=W<560;
+  H=narrow?310:380;
+  M=narrow?{l:30,r:10,t:12,b:34}:{l:44,r:16,t:16,b:40};
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   const pw=W-M.l-M.r,ph=H-M.t-M.b;
   const X=f=>M.l+f*pw,Y=p=>M.t+ph-((p-.5)/10)*ph;
   let g='';
-  for(let p=1;p<=10;p++)g+=`<line class="gl" x1="${M.l}" x2="${W-M.r}" y1="${Y(p)}" y2="${Y(p)}"/><text x="${M.l-10}" y="${Y(p)+4}" text-anchor="end">${p}</text>`;
+  for(let p=1;p<=10;p++)g+=`<line class="gl" x1="${M.l}" x2="${W-M.r}" y1="${Y(p)}" y2="${Y(p)}"/><text x="${M.l-7}" y="${Y(p)+4}" text-anchor="end">${p}</text>`;
+  // x-axis ticks: [position, label, label position]
   const ticks=[];
-  if(S.scale===0){for(let h=0;h<=24;h+=2)ticks.push([h/24,pad(h%24)+':00'])}
-  else if(S.scale===1){const n=dim(r.s.getFullYear(),r.s.getMonth());for(let d=1;d<=n;d++)if(d===1||d%2===1||n<=20)ticks.push([(d-1)/n,String(d)])}
-  else{for(let m=0;m<12;m++)ticks.push([(new Date(r.s.getFullYear(),m,1)-r.s)/(r.e-r.s),MONTHS[m].slice(0,3)])}
-  ticks.forEach(([f,l])=>{g+=`<line class="gl" x1="${X(f)}" x2="${X(f)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(f)}" y="${H-M.b+16}" text-anchor="${S.scale===2?'start':'middle'}">${l}</text>`});
+  if(S.scale===0){
+    const step=narrow?4:2;
+    for(let h=0;h<=24;h+=step)ticks.push([h/24,narrow?pad(h%24):pad(h%24)+':00',h/24]);
+  }else if(S.scale===1){
+    const n=dim(r.s.getFullYear(),r.s.getMonth());
+    const step=Math.max(1,Math.ceil(24/(pw/n)));
+    for(let d=1;d<=n;d+=step)ticks.push([(d-1)/n,String(d),(d-1)/n+.5/n]);
+  }else{
+    for(let m=0;m<12;m++){
+      const f=(new Date(r.s.getFullYear(),m,1)-r.s)/(r.e-r.s),f2=(new Date(r.s.getFullYear(),m+1,1)-r.s)/(r.e-r.s);
+      ticks.push([f,MONTHS[m].slice(0,narrow?1:3),(f+f2)/2]);
+    }
+  }
+  ticks.forEach(([f,l,lf])=>{g+=`<line class="gl" x1="${X(f)}" x2="${X(f)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(lf)}" y="${H-M.b+15}" text-anchor="middle">${l}</text>`});
+  g+=`<line class="gl" x1="${W-M.r}" x2="${W-M.r}" y1="${M.t}" y2="${H-M.b}"/>`;
   g+=`<line class="ax" x1="${M.l}" x2="${W-M.r}" y1="${H-M.b}" y2="${H-M.b}"/><line class="ax" x1="${M.l}" x2="${M.l}" y1="${M.t}" y2="${H-M.b}"/>`;
-  g+=`<text x="${W/2}" y="${H-4}" text-anchor="middle">${['Hour of day','Day of month','Month'][S.scale]}</text>`;
-  g+=`<text transform="translate(11 ${M.t+ph/2}) rotate(-90)" text-anchor="middle">Priority</text>`;
+  g+=`<text x="${M.l+pw/2}" y="${H-4}" text-anchor="middle">${['Hour of day','Day of month','Month'][S.scale]}</text>`;
+  g+=`<text transform="translate(9 ${M.t+ph/2}) rotate(-90)" text-anchor="middle">Priority</text>`;
   const nf=(Date.now()-r.s)/(r.e-r.s);
   if(nf>=0&&nf<=1)g+=`<line class="nowline" x1="${X(nf)}" x2="${X(nf)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(nf)+4}" y="${M.t+10}" style="fill:var(--accent)">now</text>`;
   const inR=visible().filter(t=>{const d=taskDate(t);return d>=r.s&&d<r.e}).sort((a,b)=>taskDate(a)-taskDate(b));
-  const seen={};
+  const rad=narrow?8:9,seen={};
   inR.forEach(t=>{
-    const x0=X((taskDate(t)-r.s)/(r.e-r.s)),y0=Y(t.priority),key=Math.round(x0/10)+'_'+t.priority;
-    const n=seen[key]=(seen[key]||0)+1,x=x0+(n-1)*13;
-    g+=`<circle class="dot ${t.done?'done':''}" data-id="${t.id}" cx="${Math.min(x,W-M.r-8)}" cy="${y0}" r="9" fill="${dotCol(t.priority)}" tabindex="0" role="button"><title>${esc(t.title||'Untitled')} · priority ${t.priority} · ${t.date} ${t.time||''}</title></circle>`;
+    const x0=X((taskDate(t)-r.s)/(r.e-r.s)),y0=Y(t.priority),key=Math.round(x0/(rad*2))+'_'+t.priority;
+    const n=seen[key]=(seen[key]||0)+1,x=x0+(n-1)*(rad*2-2);
+    g+=`<circle class="dot ${t.done?'done':''}" data-id="${t.id}" cx="${Math.min(x,W-M.r-rad)}" cy="${y0}" r="${rad}" fill="${dotCol(t.priority)}" tabindex="0" role="button"><title>${esc(t.title||'Untitled')} · priority ${t.priority} · ${t.date} ${t.time||''}</title></circle>`;
   });
-  if(!inR.length)g+=`<text x="${W/2}" y="${H/2}" text-anchor="middle" style="font-size:14px">Nothing due in this range${S.minPri>1?' at this priority':''}. Click a calendar day to add a task.</text>`;
-  $('#plot').innerHTML=g;
+  if(!inR.length){
+    g+=`<text x="${M.l+pw/2}" y="${M.t+ph/2-6}" text-anchor="middle" style="font-size:13px">Nothing due in this range${S.minPri>1?' at this priority':''}.</text>`;
+    g+=`<text x="${M.l+pw/2}" y="${M.t+ph/2+14}" text-anchor="middle" style="font-size:13px">Tap a calendar day to add a task.</text>`;
+  }
+  svg.innerHTML=g;
   $('#dList').innerHTML=inR.map(t=>`<div class="titem ${t.done?'done':''}" data-id="${t.id}"><span class="pdot" style="background:${dotCol(t.priority)}"></span><span class="t">${esc(t.title||'Untitled')}</span><span class="m">P${t.priority} · ${t.date.slice(5)} ${t.time||''}</span></div>`).join('');
 }
+// Redraw when the window is resized or the phone is rotated.
+let rsz=null;
+window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(()=>{const w=Math.round($('#plot').parentElement.clientWidth||900);if(Math.max(280,w)!==lastW)drawPlot()},150)});
 $('#plot').addEventListener('click',e=>{const id=e.target.dataset&&e.target.dataset.id;if(id)openEditor(null,id)});
 $('#plot').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.id)openEditor(null,e.target.dataset.id)});
 $('#dList').addEventListener('click',e=>{const it=e.target.closest('.titem');if(it)openEditor(null,it.dataset.id)});
