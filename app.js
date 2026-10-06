@@ -141,6 +141,22 @@ $('#cal').addEventListener('click',e=>{const c=e.target.closest('.cell');if(c)op
 $('#cPrev').onclick=()=>{S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()-1,1);drawCal()};
 $('#cNext').onclick=()=>{S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()+1,1);drawCal()};
 
+/* ================= pop-ups and the phone's Back button ================= */
+// Each pop-up adds one history entry, so Back closes the pop-up instead of leaving the app.
+let layer=null;
+function showLayer(el){
+  if(layer===el)return;
+  if(layer){layer.classList.remove('open');layer=el;el.classList.add('open');return}
+  layer=el;el.classList.add('open');
+  try{history.pushState({tgLayer:1},'')}catch(e){}
+}
+function hideLayer(){
+  if(!layer)return;
+  layer.classList.remove('open');layer=null;
+  try{history.back()}catch(e){}
+}
+window.addEventListener('popstate',()=>{if(layer){layer.classList.remove('open');layer=null}});
+
 /* ================= task editor ================= */
 let E={date:null,id:null};
 function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:2,done:false}}
@@ -150,10 +166,12 @@ function openEditor(date,id,originEl){
   const m=$('#modal');
   if(originEl){const r=originEl.getBoundingClientRect();m.style.transformOrigin=`${r.left+r.width/2}px ${r.top+r.height/2}px`}
   else m.style.transformOrigin='center';
-  $('#scrim').classList.add('open');
+  showLayer($('#scrim'));
   m.style.animation='none';void m.offsetWidth;m.style.animation='';
   fillEditor();
-  setTimeout(()=>$('#fTitle').focus(),50);
+  // Only auto-focus the title with a mouse. On a phone this would pop up the keyboard
+  // when you just want to look at a task.
+  if(window.matchMedia&&matchMedia('(pointer:fine)').matches)setTimeout(()=>$('#fTitle').focus(),50);
 }
 function fillEditor(){
   $('#mTitle').textContent=fmtDate(E.date);
@@ -180,7 +198,7 @@ function updateSummary(){
   $('#remSummary').textContent=`${t.remFreq} reminder${t.remFreq>1?'s':''} a day at random times between ${t.remStart} and ${t.remEnd}, for ${days} day${days>1?'s':''} up to the deadline (${t.remFreq*days} in total at most).`;
 }
 ['fPri','fFreq','fRS','fRE','fRD','fDate','fTime'].forEach(id=>$('#'+id).addEventListener('input',updateSummary));
-const closeEditor=()=>$('#scrim').classList.remove('open');
+const closeEditor=()=>{if(layer===$('#scrim'))hideLayer()};
 $('#cancelBtn').onclick=closeEditor;
 $('#scrim').addEventListener('mousedown',e=>{if(e.target.id==='scrim')closeEditor()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeEditor();closeAcc()}});
@@ -336,7 +354,7 @@ window.addEventListener('offline',refreshStatus);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){queueSync();tick()}});
 
 /* account dialog */
-function closeAcc(){$('#accScrim').classList.remove('open')}
+function closeAcc(){if(layer===$('#accScrim'))hideLayer()}
 function drawAcc(msg,isErr){
   const b=$('#accBody');
   if(!cloudConfigured){
@@ -362,7 +380,7 @@ function drawAcc(msg,isErr){
     };
   }
 }
-$('#accBtn').onclick=()=>{drawAcc();$('#accScrim').classList.add('open')};
+$('#accBtn').onclick=()=>{drawAcc();showLayer($('#accScrim'))};
 $('#accClose').onclick=closeAcc;
 $('#accScrim').addEventListener('mousedown',e=>{if(e.target.id==='accScrim')closeAcc()});
 
