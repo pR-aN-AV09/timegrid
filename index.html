@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Timegrid</title>
+<meta name="theme-color" content="#0e7585">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Timegrid<small>See what's due, and how much it matters.</small></h1>
+    <div class="row">
+      <span class="status" id="status"><i></i><span id="statusTxt">Local only</span></span>
+      <button class="btn" id="accBtn">Account</button>
+      <button class="btn" id="notifBtn">Enable reminders</button>
+      <button class="btn" id="themeBtn">Theme</button>
+      <button class="btn primary" id="newBtn">New task</button>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="ctl">
+      <label for="scale">Time scale <span id="scaleOut">Days</span></label>
+      <input type="range" id="scale" min="0" max="2" step="1" value="1">
+      <div class="ticks"><span>Hours (one day)</span><span>Days (one month)</span><span>Months (one year)</span></div>
+    </div>
+    <div class="ctl">
+      <label for="minPri">Show priority from <span id="priOut">1 and up</span></label>
+      <input type="range" id="minPri" min="1" max="10" step="1" value="1">
+      <div class="ticks"><span>1 low</span><span>5</span><span>10 urgent</span></div>
+    </div>
+  </div>
+
+  <section class="card" aria-labelledby="dashH">
+    <header>
+      <h2 id="dashH">Dashboard</h2>
+      <div class="navgrp">
+        <button class="btn sm" id="dPrev" aria-label="Previous">‹</button>
+        <b id="dLabel"></b>
+        <button class="btn sm" id="dNext" aria-label="Next">›</button>
+        <button class="btn sm" id="dToday">Today</button>
+      </div>
+    </header>
+    <svg id="plot" viewBox="0 0 900 380" role="img" aria-label="Tasks plotted by time and priority"></svg>
+    <div class="legend"><span>Low</span><div class="ramp"></div><span>High priority</span><span style="margin-left:auto">Click a dot to edit</span></div>
+    <div class="tl" id="dList"></div>
+  </section>
+
+  <section class="card">
+    <header><h2>Today's reminders</h2></header>
+    <div id="todayRem" class="rem"></div>
+    <p class="hint" style="margin-top:10px">Reminder times are picked at random inside each task's time window, and are the same on every device you sign in on.</p>
+  </section>
+
+  <section class="card" aria-labelledby="calH">
+    <header>
+      <h2 id="calH">Calendar</h2>
+      <div class="navgrp">
+        <button class="btn sm" id="cPrev" aria-label="Previous month">‹</button>
+        <b id="cLabel"></b>
+        <button class="btn sm" id="cNext" aria-label="Next month">›</button>
+      </div>
+    </header>
+    <div class="cal" id="cal"></div>
+  </section>
+</div>
+
+<!-- Task editor -->
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle" id="modal">
+    <h3 id="mTitle"></h3>
+    <div class="tabs" id="tabs"></div>
+    <div class="prio">
+      <div class="big"><span>Priority</span><output id="pOut">5</output></div>
+      <input type="range" id="fPri" min="1" max="10" step="1" value="5" aria-label="Priority">
+      <div class="ticks"><span>1 low</span><span>10 urgent</span></div>
+    </div>
+    <div class="field"><label for="fTitle">Task</label><input type="text" id="fTitle" placeholder="What needs to get done?"></div>
+    <div class="field"><label for="fNotes">Notes</label><textarea id="fNotes" rows="3" placeholder="Details, links, steps"></textarea></div>
+    <div class="g2">
+      <div class="field"><label for="fDate">Deadline date</label><input type="date" id="fDate"></div>
+      <div class="field"><label for="fTime">Deadline time</label><input type="time" id="fTime" value="17:00"></div>
+    </div>
+    <fieldset>
+      <legend>Reminders</legend>
+      <div class="g3">
+        <div class="field"><label for="fFreq">Frequency per day</label><input type="number" id="fFreq" min="0" max="30" value="0"></div>
+        <div class="field"><label for="fRS">Between</label><input type="time" id="fRS" value="09:00"></div>
+        <div class="field"><label for="fRE">and</label><input type="time" id="fRE" value="20:00"></div>
+      </div>
+      <div class="field"><label for="fRD">Start reminding this many days before the deadline</label><input type="number" id="fRD" min="0" max="365" value="2"></div>
+      <p class="hint" id="remSummary"></p>
+    </fieldset>
+    <div class="actions">
+      <div class="row">
+        <button class="btn danger" id="delBtn">Delete</button>
+        <button class="btn" id="doneBtn">Mark done</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="cancelBtn">Close</button>
+        <button class="btn primary" id="saveBtn">Save task</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Account -->
+<div class="scrim" id="accScrim">
+  <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="accTitle">
+    <h3 id="accTitle">Account and sync</h3>
+    <div id="accBody"></div>
+    <div class="actions" style="margin-top:12px"><span></span><button class="btn" id="accClose">Close</button></div>
+  </div>
+</div>
+<div id="toasts" aria-live="polite"></div>
+
+<script src="./vendor/supabase.js"></script>
+<script src="./config.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

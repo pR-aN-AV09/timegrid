@@ -1,0 +1,360 @@
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const pad=n=>String(n).padStart(2,'0');
+const dkey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const SCALES=['Hours','Days','Months'];
+const uid=()=>'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ================= storage ================= */
+function ls(k,def){try{const v=localStorage.getItem(k);return v?JSON.parse(v):def}catch(e){return def}}
+function ss(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+let tasks=ls('tg_tasks',[]);           // includes deleted tombstones (needed for sync)
+let dirty=new Set(ls('tg_dirty',[]));  // ids waiting to upload
+let fired=ls('tg_fired',{});
+const prefs=ls('tg_prefs',{});
+const S={scale:prefs.scale??1,minPri:prefs.minPri??1,anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1)};
+const live=()=>tasks.filter(t=>!t.deleted);
+const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty])};
+const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:document.documentElement.dataset.theme||''});
+if(prefs.theme)document.documentElement.dataset.theme=prefs.theme;
+
+function putTask(t){
+  t.updated=Date.now();
+  const i=tasks.findIndex(x=>x.id===t.id);
+  if(i>=0)tasks[i]=t;else tasks.push(t);
+  dirty.add(t.id);persist();queueSync();
+}
+function removeTask(id){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  t.deleted=true;t.updated=Date.now();dirty.add(id);persist();queueSync();
+}
+
+/* ================= helpers ================= */
+const hue=p=>210-((p-1)/9)*210;
+const col=p=>`hsl(${hue(p)} 68% 44%)`;
+const dotCol=p=>`hsl(${hue(p)} 72% 52%)`;
+const taskDate=t=>new Date(t.date+'T'+(t.time||'00:00'));
+const dim=(y,m)=>new Date(y,m+1,0).getDate();
+const visible=()=>live().filter(t=>t.priority>=S.minPri);
+const tasksOn=k=>visible().filter(t=>t.date===k).sort((a,b)=>(a.time||'').localeCompare(b.time||'')||b.priority-a.priority);
+const dayTasks=k=>live().filter(t=>t.date===k).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+const fmtDate=k=>new Date(k+'T00:00').toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+
+/* ================= dashboard ================= */
+const W=900,H=380,M={l:44,r:16,t:16,b:40};
+function range(){
+  const a=S.anchor,y=a.getFullYear(),m=a.getMonth();
+  if(S.scale===0){const s=new Date(y,m,a.getDate()),e=new Date(y,m,a.getDate()+1);return{s,e,label:s.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})}}
+  if(S.scale===1)return{s:new Date(y,m,1),e:new Date(y,m+1,1),label:MONTHS[m]+' '+y};
+  return{s:new Date(y,0,1),e:new Date(y+1,0,1),label:String(y)};
+}
+function drawPlot(){
+  const r=range();$('#dLabel').textContent=r.label;
+  const pw=W-M.l-M.r,ph=H-M.t-M.b;
+  const X=f=>M.l+f*pw,Y=p=>M.t+ph-((p-.5)/10)*ph;
+  let g='';
+  for(let p=1;p<=10;p++)g+=`<line class="gl" x1="${M.l}" x2="${W-M.r}" y1="${Y(p)}" y2="${Y(p)}"/><text x="${M.l-10}" y="${Y(p)+4}" text-anchor="end">${p}</text>`;
+  const ticks=[];
+  if(S.scale===0){for(let h=0;h<=24;h+=2)ticks.push([h/24,pad(h%24)+':00'])}
+  else if(S.scale===1){const n=dim(r.s.getFullYear(),r.s.getMonth());for(let d=1;d<=n;d++)if(d===1||d%2===1||n<=20)ticks.push([(d-1)/n,String(d)])}
+  else{for(let m=0;m<12;m++)ticks.push([(new Date(r.s.getFullYear(),m,1)-r.s)/(r.e-r.s),MONTHS[m].slice(0,3)])}
+  ticks.forEach(([f,l])=>{g+=`<line class="gl" x1="${X(f)}" x2="${X(f)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(f)}" y="${H-M.b+16}" text-anchor="${S.scale===2?'start':'middle'}">${l}</text>`});
+  g+=`<line class="ax" x1="${M.l}" x2="${W-M.r}" y1="${H-M.b}" y2="${H-M.b}"/><line class="ax" x1="${M.l}" x2="${M.l}" y1="${M.t}" y2="${H-M.b}"/>`;
+  g+=`<text x="${W/2}" y="${H-4}" text-anchor="middle">${['Hour of day','Day of month','Month'][S.scale]}</text>`;
+  g+=`<text transform="translate(11 ${M.t+ph/2}) rotate(-90)" text-anchor="middle">Priority</text>`;
+  const nf=(Date.now()-r.s)/(r.e-r.s);
+  if(nf>=0&&nf<=1)g+=`<line class="nowline" x1="${X(nf)}" x2="${X(nf)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(nf)+4}" y="${M.t+10}" style="fill:var(--accent)">now</text>`;
+  const inR=visible().filter(t=>{const d=taskDate(t);return d>=r.s&&d<r.e}).sort((a,b)=>taskDate(a)-taskDate(b));
+  const seen={};
+  inR.forEach(t=>{
+    const x0=X((taskDate(t)-r.s)/(r.e-r.s)),y0=Y(t.priority),key=Math.round(x0/10)+'_'+t.priority;
+    const n=seen[key]=(seen[key]||0)+1,x=x0+(n-1)*13;
+    g+=`<circle class="dot ${t.done?'done':''}" data-id="${t.id}" cx="${Math.min(x,W-M.r-8)}" cy="${y0}" r="9" fill="${dotCol(t.priority)}" tabindex="0" role="button"><title>${esc(t.title||'Untitled')} · priority ${t.priority} · ${t.date} ${t.time||''}</title></circle>`;
+  });
+  if(!inR.length)g+=`<text x="${W/2}" y="${H/2}" text-anchor="middle" style="font-size:14px">Nothing due in this range${S.minPri>1?' at this priority':''}. Click a calendar day to add a task.</text>`;
+  $('#plot').innerHTML=g;
+  $('#dList').innerHTML=inR.map(t=>`<div class="titem ${t.done?'done':''}" data-id="${t.id}"><span class="pdot" style="background:${dotCol(t.priority)}"></span><span class="t">${esc(t.title||'Untitled')}</span><span class="m">P${t.priority} · ${t.date.slice(5)} ${t.time||''}</span></div>`).join('');
+}
+$('#plot').addEventListener('click',e=>{const id=e.target.dataset&&e.target.dataset.id;if(id)openEditor(null,id)});
+$('#plot').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.id)openEditor(null,e.target.dataset.id)});
+$('#dList').addEventListener('click',e=>{const it=e.target.closest('.titem');if(it)openEditor(null,it.dataset.id)});
+function shift(dir){const a=S.anchor;
+  if(S.scale===0)S.anchor=new Date(a.getFullYear(),a.getMonth(),a.getDate()+dir);
+  else if(S.scale===1)S.anchor=new Date(a.getFullYear(),a.getMonth()+dir,1);
+  else S.anchor=new Date(a.getFullYear()+dir,0,1);
+  drawPlot()}
+$('#dPrev').onclick=()=>shift(-1);$('#dNext').onclick=()=>shift(1);
+$('#dToday').onclick=()=>{S.anchor=new Date();drawPlot()};
+
+/* ================= sliders ================= */
+function syncSliders(){
+  $('#scale').value=S.scale;$('#scaleOut').textContent=SCALES[S.scale];
+  $('#minPri').value=S.minPri;$('#priOut').textContent=S.minPri+' and up';
+}
+$('#scale').oninput=e=>{S.scale=+e.target.value;syncSliders();savePrefs();drawPlot()};
+$('#minPri').oninput=e=>{S.minPri=+e.target.value;syncSliders();savePrefs();render()};
+
+/* ================= calendar ================= */
+function drawCal(){
+  const y=S.calM.getFullYear(),m=S.calM.getMonth();
+  $('#cLabel').textContent=MONTHS[m]+' '+y;
+  const first=new Date(y,m,1),start=new Date(y,m,1-((first.getDay()+6)%7));
+  let h=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="dow">${d}</div>`).join('');
+  const todayK=dkey(new Date());
+  for(let i=0;i<42;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i),k=dkey(d);
+    if(i>=35&&d.getMonth()!==m)break;
+    const ts=tasksOn(k);
+    h+=`<button class="cell ${d.getMonth()!==m?'out':''} ${k===todayK?'today':''}" data-k="${k}" aria-label="${fmtDate(k)}, ${ts.length} tasks"><span class="n">${d.getDate()}</span>${ts.slice(0,3).map(t=>`<span class="chip ${t.done?'done':''}" style="background:${col(t.priority)}">${esc(t.title||'Untitled')}</span>`).join('')}${ts.length>3?`<span class="more">+${ts.length-3} more</span>`:''}</button>`;
+  }
+  $('#cal').innerHTML=h;
+}
+$('#cal').addEventListener('click',e=>{const c=e.target.closest('.cell');if(c)openEditor(c.dataset.k,null,c)});
+$('#cPrev').onclick=()=>{S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()-1,1);drawCal()};
+$('#cNext').onclick=()=>{S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()+1,1);drawCal()};
+
+/* ================= task editor ================= */
+let E={date:null,id:null};
+function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:2,done:false}}
+function openEditor(date,id,originEl){
+  if(id){const t=tasks.find(x=>x.id===id);if(!t||t.deleted)return;E.date=t.date;E.id=id}
+  else{E.date=date;E.id=null}
+  const m=$('#modal');
+  if(originEl){const r=originEl.getBoundingClientRect();m.style.transformOrigin=`${r.left+r.width/2}px ${r.top+r.height/2}px`}
+  else m.style.transformOrigin='center';
+  $('#scrim').classList.add('open');
+  m.style.animation='none';void m.offsetWidth;m.style.animation='';
+  fillEditor();
+  setTimeout(()=>$('#fTitle').focus(),50);
+}
+function fillEditor(){
+  $('#mTitle').textContent=fmtDate(E.date);
+  $('#tabs').innerHTML=dayTasks(E.date).map(t=>`<button class="tab ${t.id===E.id?'on':''}" data-id="${t.id}"><span class="pdot" style="background:${dotCol(t.priority)};width:9px;height:9px"></span>${esc(t.title||'Untitled')}</button>`).join('')+`<button class="tab ${!E.id?'on':''}" data-id="">+ New</button>`;
+  const t=E.id?tasks.find(x=>x.id===E.id):blank(E.date);
+  $('#fPri').value=t.priority;$('#pOut').textContent=t.priority;
+  $('#fTitle').value=t.title;$('#fNotes').value=t.notes;$('#fDate').value=t.date;$('#fTime').value=t.time||'17:00';
+  $('#fFreq').value=t.remFreq;$('#fRS').value=t.remStart;$('#fRE').value=t.remEnd;$('#fRD').value=t.remDays;
+  $('#delBtn').style.display=E.id?'':'none';$('#doneBtn').style.display=E.id?'':'none';
+  $('#doneBtn').textContent=t.done?'Mark not done':'Mark done';
+  updateSummary();
+}
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;E.id=b.dataset.id||null;fillEditor()});
+function formTask(){
+  return{id:E.id||uid(),title:$('#fTitle').value.trim(),notes:$('#fNotes').value,date:$('#fDate').value||E.date,time:$('#fTime').value||'17:00',
+    priority:+$('#fPri').value,remFreq:Math.max(0,Math.min(30,+$('#fFreq').value||0)),remStart:$('#fRS').value||'09:00',remEnd:$('#fRE').value||'20:00',
+    remDays:Math.max(0,Math.min(365,+$('#fRD').value||0)),done:E.id?!!tasks.find(x=>x.id===E.id).done:false};
+}
+function updateSummary(){
+  $('#pOut').textContent=$('#fPri').value;
+  const t=formTask();
+  if(!t.remFreq){$('#remSummary').textContent='Reminders are off. Set a frequency above 0 to turn them on.';return}
+  const days=t.remDays+1;
+  $('#remSummary').textContent=`${t.remFreq} reminder${t.remFreq>1?'s':''} a day at random times between ${t.remStart} and ${t.remEnd}, for ${days} day${days>1?'s':''} up to the deadline (${t.remFreq*days} in total at most).`;
+}
+['fPri','fFreq','fRS','fRE','fRD','fDate','fTime'].forEach(id=>$('#'+id).addEventListener('input',updateSummary));
+const closeEditor=()=>$('#scrim').classList.remove('open');
+$('#cancelBtn').onclick=closeEditor;
+$('#scrim').addEventListener('mousedown',e=>{if(e.target.id==='scrim')closeEditor()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeEditor();closeAcc()}});
+$('#saveBtn').onclick=()=>{
+  const t=formTask();
+  if(!t.title){$('#fTitle').focus();$('#fTitle').style.borderColor='#c0392b';return}
+  $('#fTitle').style.borderColor='';
+  putTask(t);closeEditor();render();toast('Saved',t.title);
+};
+$('#delBtn').onclick=()=>{if(!E.id)return;removeTask(E.id);closeEditor();render()};
+$('#doneBtn').onclick=()=>{const t=tasks.find(x=>x.id===E.id);if(!t)return;t.done=!t.done;putTask(t);closeEditor();render()};
+$('#newBtn').onclick=()=>openEditor(dkey(new Date()),null);
+
+/* ================= reminders ================= */
+function hash(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19}return h>>>0}
+function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const toMin=s=>{const [h,m]=(s||'0:0').split(':').map(Number);return h*60+m};
+function remindersFor(t){
+  if(!t.remFreq||t.done||t.deleted)return[];
+  const out=[],dl=new Date(t.date+'T00:00'),dlMin=toMin(t.time);
+  for(let d=0;d<=t.remDays;d++){
+    const day=new Date(dl.getFullYear(),dl.getMonth(),dl.getDate()-d),k=dkey(day);
+    const a=toMin(t.remStart);let b=toMin(t.remEnd);
+    if(d===0)b=Math.min(b,dlMin);
+    if(b<=a)continue;
+    const span=b-a,want=Math.min(t.remFreq,span),r=rng(hash(t.id+'|'+k)),set=new Set();
+    let guard=0;while(set.size<want&&guard++<500)set.add(a+Math.floor(r()*span));
+    [...set].sort((x,y)=>x-y).forEach(min=>out.push({key:t.id+'|'+k+'|'+min,at:new Date(day.getFullYear(),day.getMonth(),day.getDate(),0,min),task:t}));
+  }
+  return out;
+}
+const allReminders=()=>tasks.flatMap(remindersFor);
+function drawTodayRem(){
+  const k=dkey(new Date()),now=Date.now();
+  const list=allReminders().filter(r=>dkey(r.at)===k).sort((a,b)=>a.at-b.at);
+  $('#todayRem').innerHTML=list.length?list.map(r=>`<span class="rtag ${r.at<now?'past':''}"><b>${pad(r.at.getHours())}:${pad(r.at.getMinutes())}</b> ${esc(r.task.title||'Untitled')}</span>`).join(''):'<span class="hint">No reminders scheduled for today.</span>';
+}
+function toast(title,body,persist){
+  const el=document.createElement('div');el.className='toast';el.innerHTML=`<b>${esc(title)}</b>${esc(body||'')}`;
+  el.onclick=()=>el.remove();$('#toasts').appendChild(el);
+  setTimeout(()=>el.remove(),persist?15000:3000);
+}
+async function systemNotify(title,body){
+  try{
+    if(!('Notification' in window)||Notification.permission!=='granted')return;
+    // Service-worker notifications are required on Android and work on desktop too.
+    if('serviceWorker' in navigator){
+      const reg=await navigator.serviceWorker.ready;
+      await reg.showNotification(title,{body,icon:'./icons/icon-192.png',badge:'./icons/icon-192.png',tag:title});
+    }else new Notification(title,{body});
+  }catch(e){}
+}
+function tick(){
+  const now=Date.now();let changed=false;
+  allReminders().forEach(r=>{
+    if(r.at>now||fired[r.key])return;
+    fired[r.key]=1;changed=true;
+    if(now-r.at>2*3600e3)return;
+    const msg=`Priority ${r.task.priority} · due ${r.task.date} ${r.task.time||''}`;
+    const title='Reminder: '+(r.task.title||'Untitled');
+    toast(title,msg,true);systemNotify(title,msg);
+  });
+  if(changed){
+    const keys=Object.keys(fired);if(keys.length>1500)keys.slice(0,500).forEach(k=>delete fired[k]);
+    ss('tg_fired',fired);drawTodayRem();
+  }
+}
+function updateNotifBtn(){
+  const b=$('#notifBtn');
+  if(!('Notification' in window)){b.style.display='none';return}
+  if(Notification.permission==='granted'){b.textContent='Notifications on';}
+}
+$('#notifBtn').onclick=()=>{
+  if(!('Notification' in window)){toast('Not supported','This browser has no notifications. In-app alerts still work.');return}
+  Notification.requestPermission().then(p=>{
+    if(p==='granted'){toast('Notifications on','You will get system alerts too.');systemNotify('Timegrid','Notifications are working.')}
+    else toast('Notifications blocked','Allow them in your browser site settings.');
+    updateNotifBtn();
+  });
+};
+$('#themeBtn').onclick=()=>{
+  const r=document.documentElement,dark=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);
+  r.dataset.theme=dark?'light':'dark';savePrefs();
+};
+
+/* ================= cloud sync (Supabase) ================= */
+const CFG=window.TG_CONFIG||{};
+const cloudConfigured=!!(CFG.url&&CFG.anonKey&&!/YOUR_/.test(CFG.url+CFG.anonKey)&&window.supabase);
+let sb=null,session=null,channel=null,syncTimer=null,syncing=false;
+if(cloudConfigured){sb=window.supabase.createClient(CFG.url,CFG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}
+
+function setStatus(kind,text){
+  const el=$('#status');el.className='status '+(kind||'');$('#statusTxt').textContent=text;
+}
+function refreshStatus(){
+  if(!cloudConfigured)return setStatus('','Local only');
+  if(!session)return setStatus('','Signed out');
+  if(!navigator.onLine)return setStatus('err','Offline · will sync later');
+  if(dirty.size)return setStatus('busy','Syncing…');
+  setStatus('ok','Synced');
+}
+function queueSync(){
+  if(!sb||!session)return;
+  clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,400);refreshStatus();
+}
+function mergeRow(row){
+  const t=Object.assign({},row.data||{});
+  t.id=row.id;t.updated=Number(row.updated_at);t.deleted=!!row.deleted;
+  const local=tasks.find(x=>x.id===t.id);
+  if(!local){tasks.push(t);return true}
+  if((local.updated||0)<t.updated){tasks[tasks.indexOf(local)]=t;dirty.delete(t.id);return true}
+  return false;
+}
+async function syncNow(){
+  if(!sb||!session||syncing||!navigator.onLine){refreshStatus();return}
+  syncing=true;setStatus('busy','Syncing…');
+  try{
+    // 1) pull everything (a personal task list is small)
+    const {data:rows,error:e1}=await sb.from('tasks').select('id,data,updated_at,deleted');
+    if(e1)throw e1;
+    let changed=false;const remote=new Set();
+    rows.forEach(r=>{remote.add(r.id);if(mergeRow(r))changed=true});
+    // 2) anything we have that the server has never seen gets uploaded
+    tasks.forEach(t=>{if(!remote.has(t.id))dirty.add(t.id)});
+    // 3) push local changes
+    const up=[...dirty].map(id=>tasks.find(t=>t.id===id)).filter(Boolean).map(t=>{
+      const {deleted,updated,...data}=t;
+      return{id:t.id,user_id:session.user.id,data,updated_at:t.updated||Date.now(),deleted:!!t.deleted};
+    });
+    if(up.length){
+      const {error:e2}=await sb.from('tasks').upsert(up,{onConflict:'id'});
+      if(e2)throw e2;
+      up.forEach(r=>dirty.delete(r.id));
+    }
+    persist();
+    if(changed)render();
+    setStatus('ok','Synced');
+  }catch(err){
+    console.error('sync failed',err);
+    setStatus('err','Sync problem');
+  }finally{syncing=false}
+}
+function subscribe(){
+  if(!sb||channel)return;
+  channel=sb.channel('tasks-live').on('postgres_changes',{event:'*',schema:'public',table:'tasks'},p=>{
+    const row=p.new;if(!row||!row.id)return;
+    if(mergeRow(row)){persist();render()}
+  }).subscribe();
+}
+function unsubscribe(){if(sb&&channel){sb.removeChannel(channel);channel=null}}
+window.addEventListener('online',()=>{refreshStatus();queueSync()});
+window.addEventListener('offline',refreshStatus);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){queueSync();tick()}});
+
+/* account dialog */
+function closeAcc(){$('#accScrim').classList.remove('open')}
+function drawAcc(msg,isErr){
+  const b=$('#accBody');
+  if(!cloudConfigured){
+    b.innerHTML=`<p>Sync is not set up yet, so tasks are saved only on this device.</p><p class="hint">To turn it on, add your Supabase URL and key to <b>config.js</b> (steps are in README.md), then reload.</p>`;
+  }else if(session){
+    b.innerHTML=`<p>Signed in as <b>${esc(session.user.email||'')}</b>.</p><p class="hint">Tasks sync automatically with every device signed in to this account.</p><div class="row"><button class="btn" id="syncBtn">Sync now</button><button class="btn danger" id="outBtn">Sign out</button></div><p class="msg ${isErr?'err':''}">${esc(msg||'')}</p>`;
+    $('#syncBtn').onclick=()=>{syncNow().then(()=>drawAcc('Synced just now.'))};
+    $('#outBtn').onclick=async()=>{await sb.auth.signOut()};
+  }else{
+    b.innerHTML=`<div class="field"><label for="aEmail">Email</label><input type="text" id="aEmail" autocomplete="email" inputmode="email"></div>
+    <div class="field"><label for="aPass">Password</label><input type="password" id="aPass" autocomplete="current-password" placeholder="At least 6 characters"></div>
+    <div class="row"><button class="btn primary" id="inBtn">Sign in</button><button class="btn" id="upBtn">Create account</button></div>
+    <p class="msg ${isErr?'err':''}" id="aMsg">${esc(msg||'')}</p>`;
+    const creds=()=>({email:$('#aEmail').value.trim(),password:$('#aPass').value});
+    $('#inBtn').onclick=async()=>{
+      const {error}=await sb.auth.signInWithPassword(creds());
+      if(error)drawAcc(error.message,true);else closeAcc();
+    };
+    $('#upBtn').onclick=async()=>{
+      const {data,error}=await sb.auth.signUp(creds());
+      if(error)return drawAcc(error.message,true);
+      if(!data.session)drawAcc('Account created. Check your email to confirm it, then sign in.');else closeAcc();
+    };
+  }
+}
+$('#accBtn').onclick=()=>{drawAcc();$('#accScrim').classList.add('open')};
+$('#accClose').onclick=closeAcc;
+$('#accScrim').addEventListener('mousedown',e=>{if(e.target.id==='accScrim')closeAcc()});
+
+if(sb){
+  sb.auth.onAuthStateChange((ev,s)=>{
+    session=s;
+    if(s){subscribe();syncNow();if($('#accScrim').classList.contains('open'))drawAcc()}
+    else{unsubscribe();if($('#accScrim').classList.contains('open'))drawAcc()}
+    refreshStatus();
+  });
+  sb.auth.getSession().then(({data})=>{session=data.session;refreshStatus();if(session){subscribe();syncNow()}});
+}
+
+/* ================= init ================= */
+function render(){drawPlot();drawCal();drawTodayRem()}
+syncSliders();render();updateNotifBtn();refreshStatus();tick();
+setInterval(tick,20000);
+setInterval(drawTodayRem,60000);
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}))}
+})();
