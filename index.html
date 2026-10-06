@@ -50,7 +50,7 @@
     </header>
     <svg id="plot" viewBox="0 0 900 380" role="img" aria-label="Tasks plotted by time and priority"></svg>
     <div class="legend"><span>Low</span><div class="ramp"></div><span>High priority</span></div>
-    <p class="hint tapnote">Tap a dot, or a task below, to edit it.</p>
+    <p class="hint tapnote" id="tapnote">Tap a dot, or a task below, to edit it.</p>
     <div class="tl" id="dList"></div>
   </section>
 
@@ -84,11 +84,16 @@
       <div class="ticks"><span>1 low</span><span>10 urgent</span></div>
     </div>
     <div class="field"><label for="fTitle">Task</label><input type="text" id="fTitle" placeholder="What needs to get done?"></div>
-    <div class="field"><label for="fNotes">Notes</label><textarea id="fNotes" rows="3" placeholder="Details, links, steps"></textarea></div>
+    <div class="field"><label for="fNotes">Notes</label><textarea id="fNotes" rows="6" placeholder="Details, links, steps"></textarea></div>
     <div class="g2">
       <div class="field"><label for="fDate">Deadline date</label><input type="date" id="fDate"></div>
       <div class="field"><label for="fTime">Deadline time</label><input type="time" id="fTime" value="17:00"></div>
     </div>
+    <div class="toggles">
+      <label class="tgl"><span>Month view<small>Show in Days scale</small></span><input type="checkbox" id="fMonth" role="switch" checked><span class="sw"></span></label>
+      <label class="tgl"><span>Year view<small>Show in Months scale</small></span><input type="checkbox" id="fYear" role="switch" checked><span class="sw"></span></label>
+    </div>
+    <p class="hint" style="margin:-4px 0 10px">The Hours scale always shows a task on its deadline day.</p>
     <fieldset>
       <legend>Reminders</legend>
       <div class="g3">
@@ -96,7 +101,7 @@
         <div class="field"><label for="fRS">Between</label><input type="time" id="fRS" value="09:00"></div>
         <div class="field"><label for="fRE">and</label><input type="time" id="fRE" value="20:00"></div>
       </div>
-      <div class="field"><label for="fRD">Start reminding this many days before the deadline</label><input type="number" id="fRD" min="0" max="365" value="2"></div>
+      <div class="field"><label for="fRD">Start reminding this many days before the deadline</label><input type="number" id="fRD" min="0" max="365" value="0"></div>
       <p class="hint" id="remSummary"></p>
     </fieldset>
     <div class="actions">

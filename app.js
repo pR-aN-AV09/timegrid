@@ -86,18 +86,28 @@ function drawPlot(){
   g+=`<text transform="translate(9 ${M.t+ph/2}) rotate(-90)" text-anchor="middle">Priority</text>`;
   const nf=(Date.now()-r.s)/(r.e-r.s);
   if(nf>=0&&nf<=1)g+=`<line class="nowline" x1="${X(nf)}" x2="${X(nf)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(nf)+4}" y="${M.t+10}" style="fill:var(--accent)">now</text>`;
-  const inR=visible().filter(t=>{const d=taskDate(t);return d>=r.s&&d<r.e}).sort((a,b)=>taskDate(a)-taskDate(b));
-  const rad=narrow?8:9,seen={};
+  const inRange=visible().filter(t=>{const d=taskDate(t);return d>=r.s&&d<r.e});
+  // Hour view always shows a task on its deadline day; month/year views obey each task's switches.
+  const shown=t=>S.scale===0||(S.scale===1&&t.showMonth!==false)||(S.scale===2&&t.showYear!==false);
+  const inR=inRange.filter(shown).sort((a,b)=>taskDate(a)-taskDate(b));
+  const hidden=inRange.length-inR.length;
+  // Dots get smaller as the time scale gets wider: hours > days > months.
+  const rad=(narrow?[10,7,5]:[11,8,6])[S.scale],sw=S.scale===2?1.2:2,seen={};
+  let hits='',dots='';
   inR.forEach(t=>{
     const x0=X((taskDate(t)-r.s)/(r.e-r.s)),y0=Y(t.priority),key=Math.round(x0/(rad*2))+'_'+t.priority;
-    const n=seen[key]=(seen[key]||0)+1,x=x0+(n-1)*(rad*2-2);
-    g+=`<circle class="dot ${t.done?'done':''}" data-id="${t.id}" cx="${Math.min(x,W-M.r-rad)}" cy="${y0}" r="${rad}" fill="${dotCol(t.priority)}" tabindex="0" role="button"><title>${esc(t.title||'Untitled')} · priority ${t.priority} · ${t.date} ${t.time||''}</title></circle>`;
+    const n=seen[key]=(seen[key]||0)+1,x=x0+(n-1)*(rad*2-2),cx=Math.min(x,W-M.r-rad);
+    // small dots get an invisible larger tap area so they stay easy to press
+    if(rad<9)hits+=`<circle data-id="${t.id}" cx="${cx}" cy="${y0}" r="12" fill="transparent" style="cursor:pointer"/>`;
+    dots+=`<circle class="dot ${t.done?'done':''}" data-id="${t.id}" cx="${cx}" cy="${y0}" r="${rad}" stroke-width="${sw}" fill="${dotCol(t.priority)}" tabindex="0" role="button"><title>${esc(t.title||'Untitled')} · priority ${t.priority} · ${t.date} ${t.time||''}</title></circle>`;
   });
+  g+=hits+dots;
   if(!inR.length){
     g+=`<text x="${M.l+pw/2}" y="${M.t+ph/2-6}" text-anchor="middle" style="font-size:13px">Nothing due in this range${S.minPri>1?' at this priority':''}.</text>`;
     g+=`<text x="${M.l+pw/2}" y="${M.t+ph/2+14}" text-anchor="middle" style="font-size:13px">Tap a calendar day to add a task.</text>`;
   }
   svg.innerHTML=g;
+  $('#tapnote').textContent='Tap a dot, or a task below, to edit it.'+(hidden?` ${hidden} task${hidden>1?'s are':' is'} hidden in this view (switched off in the task\'s settings).`:'');
   $('#dList').innerHTML=inR.map(t=>`<div class="titem ${t.done?'done':''}" data-id="${t.id}"><span class="pdot" style="background:${dotCol(t.priority)}"></span><span class="t">${esc(t.title||'Untitled')}</span><span class="m">P${t.priority} · ${t.date.slice(5)} ${t.time||''}</span></div>`).join('');
 }
 // Redraw when the window is resized or the phone is rotated.
@@ -159,7 +169,7 @@ window.addEventListener('popstate',()=>{if(layer){layer.classList.remove('open')
 
 /* ================= task editor ================= */
 let E={date:null,id:null};
-function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:2,done:false}}
+function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:0,showMonth:true,showYear:true,done:false}}
 function openEditor(date,id,originEl){
   if(id){const t=tasks.find(x=>x.id===id);if(!t||t.deleted)return;E.date=t.date;E.id=id}
   else{E.date=date;E.id=null}
@@ -179,7 +189,7 @@ function fillEditor(){
   const t=E.id?tasks.find(x=>x.id===E.id):blank(E.date);
   $('#fPri').value=t.priority;$('#pOut').textContent=t.priority;
   $('#fTitle').value=t.title;$('#fNotes').value=t.notes;$('#fDate').value=t.date;$('#fTime').value=t.time||'17:00';
-  $('#fFreq').value=t.remFreq;$('#fRS').value=t.remStart;$('#fRE').value=t.remEnd;$('#fRD').value=t.remDays;
+  $('#fFreq').value=t.remFreq;$('#fRS').value=t.remStart;$('#fRE').value=t.remEnd;$('#fRD').value=t.remDays;$('#fMonth').checked=t.showMonth!==false;$('#fYear').checked=t.showYear!==false;
   $('#delBtn').style.display=E.id?'':'none';$('#doneBtn').style.display=E.id?'':'none';
   $('#doneBtn').textContent=t.done?'Mark not done':'Mark done';
   updateSummary();
@@ -188,7 +198,7 @@ $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)r
 function formTask(){
   return{id:E.id||uid(),title:$('#fTitle').value.trim(),notes:$('#fNotes').value,date:$('#fDate').value||E.date,time:$('#fTime').value||'17:00',
     priority:+$('#fPri').value,remFreq:Math.max(0,Math.min(30,+$('#fFreq').value||0)),remStart:$('#fRS').value||'09:00',remEnd:$('#fRE').value||'20:00',
-    remDays:Math.max(0,Math.min(365,+$('#fRD').value||0)),done:E.id?!!tasks.find(x=>x.id===E.id).done:false};
+    remDays:Math.max(0,Math.min(365,+$('#fRD').value||0)),showMonth:$('#fMonth').checked,showYear:$('#fYear').checked,done:E.id?!!tasks.find(x=>x.id===E.id).done:false};
 }
 function updateSummary(){
   $('#pOut').textContent=$('#fPri').value;
