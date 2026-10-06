@@ -15,11 +15,12 @@ let tasks=ls('tg_tasks',[]);           // includes deleted tombstones (needed fo
 let dirty=new Set(ls('tg_dirty',[]));  // ids waiting to upload
 let fired=ls('tg_fired',{});
 const prefs=ls('tg_prefs',{});
-const S={scale:prefs.scale??1,minPri:prefs.minPri??1,anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1)};
+const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1)};
 const live=()=>tasks.filter(t=>!t.deleted);
 const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty])};
-const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:document.documentElement.dataset.theme||''});
-if(prefs.theme)document.documentElement.dataset.theme=prefs.theme;
+const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear});
+function applyTheme(v){const r=document.documentElement;if(v)r.dataset.theme=v;else delete r.dataset.theme}
+applyTheme(S.theme);
 
 function putTask(t){
   t.updated=Date.now();
@@ -57,13 +58,13 @@ function drawPlot(){
   const svg=$('#plot');
   W=Math.max(280,Math.round(svg.parentElement.clientWidth||900));lastW=W;
   const narrow=W<560;
-  H=narrow?310:380;
-  M=narrow?{l:30,r:10,t:12,b:34}:{l:44,r:16,t:16,b:40};
+  H=narrow?310:Math.max(400,Math.min(580,Math.round(W*0.42)));
+  M=narrow?{l:30,r:10,t:12,b:34}:{l:52,r:18,t:18,b:50};
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   const pw=W-M.l-M.r,ph=H-M.t-M.b;
   const X=f=>M.l+f*pw,Y=p=>M.t+ph-((p-.5)/10)*ph;
   let g='';
-  for(let p=1;p<=10;p++)g+=`<line class="gl" x1="${M.l}" x2="${W-M.r}" y1="${Y(p)}" y2="${Y(p)}"/><text x="${M.l-7}" y="${Y(p)+4}" text-anchor="end">${p}</text>`;
+  for(let p=1;p<=10;p++)g+=`<line class="gl" x1="${M.l}" x2="${W-M.r}" y1="${Y(p)}" y2="${Y(p)}"/><text x="${M.l-8}" y="${Y(p)+4.5}" text-anchor="end">${p}</text>`;
   // x-axis ticks: [position, label, label position]
   const ticks=[];
   if(S.scale===0){
@@ -71,7 +72,7 @@ function drawPlot(){
     for(let h=0;h<=24;h+=step)ticks.push([h/24,narrow?pad(h%24):pad(h%24)+':00',h/24]);
   }else if(S.scale===1){
     const n=dim(r.s.getFullYear(),r.s.getMonth());
-    const step=Math.max(1,Math.ceil(24/(pw/n)));
+    const step=Math.max(1,Math.ceil((narrow?24:28)/(pw/n)));
     for(let d=1;d<=n;d+=step)ticks.push([(d-1)/n,String(d),(d-1)/n+.5/n]);
   }else{
     for(let m=0;m<12;m++){
@@ -79,11 +80,11 @@ function drawPlot(){
       ticks.push([f,MONTHS[m].slice(0,narrow?1:3),(f+f2)/2]);
     }
   }
-  ticks.forEach(([f,l,lf])=>{g+=`<line class="gl" x1="${X(f)}" x2="${X(f)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(lf)}" y="${H-M.b+15}" text-anchor="middle">${l}</text>`});
+  ticks.forEach(([f,l,lf])=>{g+=`<line class="gl" x1="${X(f)}" x2="${X(f)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(lf)}" y="${H-M.b+(narrow?15:19)}" text-anchor="middle">${l}</text>`});
   g+=`<line class="gl" x1="${W-M.r}" x2="${W-M.r}" y1="${M.t}" y2="${H-M.b}"/>`;
   g+=`<line class="ax" x1="${M.l}" x2="${W-M.r}" y1="${H-M.b}" y2="${H-M.b}"/><line class="ax" x1="${M.l}" x2="${M.l}" y1="${M.t}" y2="${H-M.b}"/>`;
-  g+=`<text x="${M.l+pw/2}" y="${H-4}" text-anchor="middle">${['Hour of day','Day of month','Month'][S.scale]}</text>`;
-  g+=`<text transform="translate(9 ${M.t+ph/2}) rotate(-90)" text-anchor="middle">Priority</text>`;
+  g+=`<text x="${M.l+pw/2}" y="${H-5}" text-anchor="middle">${['Hour of day','Day of month','Month'][S.scale]}</text>`;
+  g+=`<text transform="translate(${narrow?9:13} ${M.t+ph/2}) rotate(-90)" text-anchor="middle">Priority</text>`;
   const nf=(Date.now()-r.s)/(r.e-r.s);
   if(nf>=0&&nf<=1)g+=`<line class="nowline" x1="${X(nf)}" x2="${X(nf)}" y1="${M.t}" y2="${H-M.b}"/><text x="${X(nf)+4}" y="${M.t+10}" style="fill:var(--accent)">now</text>`;
   const inRange=visible().filter(t=>{const d=taskDate(t);return d>=r.s&&d<r.e});
@@ -92,7 +93,7 @@ function drawPlot(){
   const inR=inRange.filter(shown).sort((a,b)=>taskDate(a)-taskDate(b));
   const hidden=inRange.length-inR.length;
   // Dots get smaller as the time scale gets wider: hours > days > months.
-  const rad=(narrow?[10,7,5]:[11,8,6])[S.scale],sw=S.scale===2?1.2:2,seen={};
+  const base=S.dot||(narrow?10:11),rad=[base,Math.max(3,Math.round(base*0.72)),Math.max(3,Math.round(base*0.54))][S.scale],sw=S.scale===2?1.2:2,seen={};
   let hits='',dots='';
   inR.forEach(t=>{
     const x0=X((taskDate(t)-r.s)/(r.e-r.s)),y0=Y(t.priority),key=Math.round(x0/(rad*2))+'_'+t.priority;
@@ -125,9 +126,11 @@ $('#dPrev').onclick=()=>shift(-1);$('#dNext').onclick=()=>shift(1);
 $('#dToday').onclick=()=>{S.anchor=new Date();drawPlot()};
 
 /* ================= sliders ================= */
+function buildRng(){document.querySelectorAll('.rng').forEach(r=>{const n=+r.dataset.n;r.querySelector('.stops').innerHTML=Array.from({length:n},(_,i)=>`<i style="left:calc(10px + (100% - 20px) * ${i/(n-1)})"></i>`).join('')})}
+function fillRng(){document.querySelectorAll('.rng').forEach(r=>{const i=r.querySelector('input'),f=(i.value-i.min)/(i.max-i.min);r.querySelector('.fill').style.width=`calc(10px + (100% - 20px) * ${f})`})}
 function syncSliders(){
   $('#scale').value=S.scale;$('#scaleOut').textContent=SCALES[S.scale];
-  $('#minPri').value=S.minPri;$('#priOut').textContent=S.minPri+' and up';
+  $('#minPri').value=S.minPri;$('#priOut').textContent=S.minPri+' and up';fillRng();
 }
 $('#scale').oninput=e=>{S.scale=+e.target.value;syncSliders();savePrefs();drawPlot()};
 $('#minPri').oninput=e=>{S.minPri=+e.target.value;syncSliders();savePrefs();render()};
@@ -169,7 +172,7 @@ window.addEventListener('popstate',()=>{if(layer){layer.classList.remove('open')
 
 /* ================= task editor ================= */
 let E={date:null,id:null};
-function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:0,showMonth:true,showYear:true,done:false}}
+function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:0,showMonth:S.defMonth,showYear:S.defYear,done:false}}
 function openEditor(date,id,originEl){
   if(id){const t=tasks.find(x=>x.id===id);if(!t||t.deleted)return;E.date=t.date;E.id=id}
   else{E.date=date;E.id=null}
@@ -276,23 +279,36 @@ function tick(){
     ss('tg_fired',fired);drawTodayRem();
   }
 }
+/* ================= settings window ================= */
 function updateNotifBtn(){
-  const b=$('#notifBtn');
-  if(!('Notification' in window)){b.style.display='none';return}
-  if(Notification.permission==='granted'){b.textContent='Notifications on';}
+  const st=$('#notifState'),en=$('#notifEnable'),te=$('#notifTest');
+  if(!('Notification' in window)){st.textContent='This browser does not support notifications. In-app alerts still work.';en.style.display='none';te.style.display='none';return}
+  const p=Notification.permission;
+  en.style.display=p==='default'?'':'none';te.style.display=p==='granted'?'':'none';
+  st.textContent=p==='granted'?'On. Reminders also appear as system notifications. To turn them off, change the site permission in your browser or phone settings.'
+    :p==='denied'?'Blocked. To allow them, change the site permission in your browser or phone settings.'
+    :'Off. Enable them to get reminders as system notifications.';
 }
-$('#notifBtn').onclick=()=>{
-  if(!('Notification' in window)){toast('Not supported','This browser has no notifications. In-app alerts still work.');return}
+$('#notifEnable').onclick=()=>{
   Notification.requestPermission().then(p=>{
     if(p==='granted'){toast('Notifications on','You will get system alerts too.');systemNotify('Timegrid','Notifications are working.')}
-    else toast('Notifications blocked','Allow them in your browser site settings.');
+    else toast('Notifications not enabled','You can allow them in your browser site settings.');
     updateNotifBtn();
   });
 };
-$('#themeBtn').onclick=()=>{
-  const r=document.documentElement,dark=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);
-  r.dataset.theme=dark?'light':'dark';savePrefs();
-};
+$('#notifTest').onclick=()=>{toast('Test reminder','This is how a reminder looks.',true);systemNotify('Timegrid','This is how a reminder looks.')};
+
+function syncSettings(){
+  const narrow=(document.querySelector('#plot').parentElement.clientWidth||900)<560,def=narrow?10:11;
+  $('#sDot').value=S.dot||def;$('#sDotOut').textContent=S.dot?S.dot+' px':'Default ('+def+' px)';
+  document.querySelectorAll('input[name=theme]').forEach(r=>r.checked=r.value===S.theme);
+  $('#sDefMonth').checked=S.defMonth;$('#sDefYear').checked=S.defYear;
+}
+$('#sDot').addEventListener('input',e=>{S.dot=+e.target.value;$('#sDotOut').textContent=S.dot+' px';savePrefs();drawPlot()});
+$('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
+document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
+$('#sDefMonth').addEventListener('change',e=>{S.defMonth=e.target.checked;savePrefs()});
+$('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePrefs()});
 
 /* ================= cloud sync (Supabase) ================= */
 const CFG=window.TG_CONFIG||{};
@@ -381,16 +397,16 @@ function drawAcc(msg,isErr){
     const creds=()=>({email:$('#aEmail').value.trim(),password:$('#aPass').value});
     $('#inBtn').onclick=async()=>{
       const {error}=await sb.auth.signInWithPassword(creds());
-      if(error)drawAcc(error.message,true);else closeAcc();
+      if(error)drawAcc(error.message,true);else drawAcc('Signed in.');
     };
     $('#upBtn').onclick=async()=>{
       const {data,error}=await sb.auth.signUp(creds());
       if(error)return drawAcc(error.message,true);
-      if(!data.session)drawAcc('Account created. Check your email to confirm it, then sign in.');else closeAcc();
+      if(!data.session)drawAcc('Account created. Check your email to confirm it, then sign in.');else drawAcc('Signed in.');
     };
   }
 }
-$('#accBtn').onclick=()=>{drawAcc();showLayer($('#accScrim'))};
+$('#accBtn').onclick=()=>{drawAcc();syncSettings();updateNotifBtn();showLayer($('#accScrim'))};
 $('#accClose').onclick=closeAcc;
 $('#accScrim').addEventListener('mousedown',e=>{if(e.target.id==='accScrim')closeAcc()});
 
@@ -406,7 +422,7 @@ if(sb){
 
 /* ================= init ================= */
 function render(){drawPlot();drawCal();drawTodayRem()}
-syncSliders();render();updateNotifBtn();refreshStatus();tick();
+buildRng();syncSliders();render();updateNotifBtn();refreshStatus();tick();
 setInterval(tick,20000);
 setInterval(drawTodayRem,60000);
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}))}

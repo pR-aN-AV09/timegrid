@@ -18,22 +18,20 @@
     <h1>Timegrid<small>See what's due, and how much it matters.</small></h1>
     <div class="row">
       <span class="status" id="status"><i></i><span id="statusTxt">Local only</span></span>
-      <button class="btn" id="accBtn">Account</button>
-      <button class="btn" id="notifBtn">Enable reminders</button>
-      <button class="btn" id="themeBtn">Theme</button>
       <button class="btn primary" id="newBtn">New task</button>
+      <button class="btn" id="accBtn" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="10" cy="4" r="1.7" fill="var(--panel)"/><circle cx="5" cy="8" r="1.7" fill="var(--panel)"/><circle cx="11" cy="12" r="1.7" fill="var(--panel)"/></svg><span class="lbl">Settings</span></button>
     </div>
   </header>
 
   <div class="controls">
     <div class="ctl">
       <label for="scale">Time scale <span id="scaleOut">Days</span></label>
-      <input type="range" id="scale" min="0" max="2" step="1" value="1">
+      <div class="rng" data-n="3"><div class="trk"></div><div class="fill"></div><div class="stops"></div><input type="range" id="scale" min="0" max="2" step="1" value="1"></div>
       <div class="ticks"><span>Hours (one day)</span><span>Days (one month)</span><span>Months (one year)</span></div>
     </div>
     <div class="ctl">
       <label for="minPri">Show priority from <span id="priOut">1 and up</span></label>
-      <input type="range" id="minPri" min="1" max="10" step="1" value="1">
+      <div class="rng" data-n="10"><div class="trk"></div><div class="fill"></div><div class="stops"></div><input type="range" id="minPri" min="1" max="10" step="1" value="1"></div>
       <div class="ticks"><span>1 low</span><span>5</span><span>10 urgent</span></div>
     </div>
   </div>
@@ -90,8 +88,8 @@
       <div class="field"><label for="fTime">Deadline time</label><input type="time" id="fTime" value="17:00"></div>
     </div>
     <div class="toggles">
-      <label class="tgl"><span>Month view<small>Show in Days scale</small></span><input type="checkbox" id="fMonth" role="switch" checked><span class="sw"></span></label>
-      <label class="tgl"><span>Year view<small>Show in Months scale</small></span><input type="checkbox" id="fYear" role="switch" checked><span class="sw"></span></label>
+      <label class="tgl"><span>Month view<small>Show in Days scale</small></span><input type="checkbox" id="fMonth" role="switch"><span class="sw"></span></label>
+      <label class="tgl"><span>Year view<small>Show in Months scale</small></span><input type="checkbox" id="fYear" role="switch"><span class="sw"></span></label>
     </div>
     <p class="hint" style="margin:-4px 0 10px">The Hours scale always shows a task on its deadline day.</p>
     <fieldset>
@@ -120,8 +118,38 @@
 <!-- Account -->
 <div class="scrim" id="accScrim">
   <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="accTitle">
-    <h3 id="accTitle">Account and sync</h3>
-    <div id="accBody"></div>
+    <h3 id="accTitle">Settings</h3>
+    <section class="sset">
+      <h4>Dot size</h4>
+      <p class="hint">Size of the dots on the Hours scale. Days and Months dots shrink from it. Saved on this device only.</p>
+      <div class="row nowrap"><input type="range" id="sDot" min="6" max="16" step="1" aria-label="Dot size"><output id="sDotOut" class="out"></output></div>
+      <button class="btn sm" id="sDotReset">Reset to default</button>
+    </section>
+    <section class="sset">
+      <h4>Notifications</h4>
+      <p class="hint" id="notifState"></p>
+      <div class="row"><button class="btn sm" id="notifEnable">Enable notifications</button><button class="btn sm" id="notifTest">Send test</button></div>
+    </section>
+    <section class="sset">
+      <h4>Theme</h4>
+      <div class="seg" role="radiogroup" aria-label="Theme">
+        <label><input type="radio" name="theme" value="">Device</label>
+        <label><input type="radio" name="theme" value="light">Light</label>
+        <label><input type="radio" name="theme" value="dark">Dark</label>
+      </div>
+    </section>
+    <section class="sset">
+      <h4>New tasks</h4>
+      <p class="hint">Whether a new task shows on the dashboard in the Days and Months views.</p>
+      <div class="toggles" style="margin-bottom:0">
+        <label class="tgl"><span>Month view<small>Show in Days scale</small></span><input type="checkbox" id="sDefMonth" role="switch"><span class="sw"></span></label>
+        <label class="tgl"><span>Year view<small>Show in Months scale</small></span><input type="checkbox" id="sDefYear" role="switch"><span class="sw"></span></label>
+      </div>
+    </section>
+    <section class="sset">
+      <h4>Account and sync</h4>
+      <div id="accBody"></div>
+    </section>
     <div class="actions" style="margin-top:12px"><span></span><button class="btn" id="accClose">Close</button></div>
   </div>
 </div>
