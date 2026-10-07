@@ -15,7 +15,7 @@ let tasks=ls('tg_tasks',[]);           // includes deleted tombstones (needed fo
 let dirty=new Set(ls('tg_dirty',[]));  // ids waiting to upload
 let fired=ls('tg_fired',{});
 const prefs=ls('tg_prefs',{});
-const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1)};
+const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1),follow:true,calFollow:true};
 const live=()=>tasks.filter(t=>!t.deleted);
 const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty])};
 const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear,line:S.line});
@@ -120,13 +120,13 @@ window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(()=>{cons
 $('#plot').addEventListener('click',e=>{const id=e.target.dataset&&e.target.dataset.id;if(id)openEditor(null,id)});
 $('#plot').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.id)openEditor(null,e.target.dataset.id)});
 $('#dList').addEventListener('click',e=>{const it=e.target.closest('.titem');if(it)openEditor(null,it.dataset.id)});
-function shift(dir){const a=S.anchor;
+function shift(dir){S.follow=false;const a=S.anchor;
   if(S.scale===0)S.anchor=new Date(a.getFullYear(),a.getMonth(),a.getDate()+dir);
   else if(S.scale===1)S.anchor=new Date(a.getFullYear(),a.getMonth()+dir,1);
   else S.anchor=new Date(a.getFullYear()+dir,0,1);
   drawPlot()}
 $('#dPrev').onclick=()=>shift(-1);$('#dNext').onclick=()=>shift(1);
-$('#dToday').onclick=()=>{S.anchor=new Date();drawPlot()};
+$('#dToday').onclick=()=>{S.anchor=new Date();S.follow=true;drawPlot()};
 
 /* ================= sliders ================= */
 function buildRng(){document.querySelectorAll('.rng').forEach(r=>{const n=+r.dataset.n;r.querySelector('.stops').innerHTML=Array.from({length:n},(_,i)=>`<i style="left:calc(10px + (100% - 20px) * ${i/(n-1)})"></i>`).join('')})}
@@ -154,8 +154,8 @@ function drawCal(){
   $('#cal').innerHTML=h;
 }
 $('#cal').addEventListener('click',e=>{const c=e.target.closest('.cell');if(c)openEditor(c.dataset.k,null,c)});
-$('#cPrev').onclick=()=>{S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()-1,1);drawCal()};
-$('#cNext').onclick=()=>{S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()+1,1);drawCal()};
+$('#cPrev').onclick=()=>{S.calFollow=false;S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()-1,1);drawCal()};
+$('#cNext').onclick=()=>{S.calFollow=false;S.calM=new Date(S.calM.getFullYear(),S.calM.getMonth()+1,1);drawCal()};
 
 /* ================= pop-ups and the phone's Back button ================= */
 // Each pop-up adds one history entry, so Back closes the pop-up instead of leaving the app.
@@ -381,7 +381,8 @@ function subscribe(){
 function unsubscribe(){if(sb&&channel){sb.removeChannel(channel);channel=null}}
 window.addEventListener('online',()=>{refreshStatus();queueSync()});
 window.addEventListener('offline',refreshStatus);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){queueSync();tick()}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){queueSync();tick();refreshClock()}});
+window.addEventListener('focus',()=>{refreshClock();tick()});
 
 /* account dialog */
 function closeAcc(){if(layer===$('#accScrim'))hideLayer()}
@@ -426,6 +427,20 @@ if(sb){
 
 /* ================= init ================= */
 function render(){drawPlot();drawCal();drawTodayRem()}
+/* ================= live clock ================= */
+// Keeps the "now" line, today's highlight and today's reminders current without a reload.
+let lastDay=dkey(new Date());
+function refreshClock(){
+  const k=dkey(new Date());
+  if(k!==lastDay){
+    lastDay=k;const n=new Date();
+    if(S.follow)S.anchor=n;                       // dashboard was showing "today": move to the new day
+    if(S.calFollow)S.calM=new Date(n.getFullYear(),n.getMonth(),1);
+    render();
+  }else{drawPlot();drawTodayRem()}                // same day: just move the "now" line
+}
+let lastBeat=Date.now();
+setInterval(()=>{const gap=Date.now()-lastBeat;lastBeat=Date.now();refreshClock();if(gap>90000){tick();queueSync()}},30000);  // a long gap means the PC slept
 buildRng();syncSliders();render();updateNotifBtn();refreshStatus();tick();
 setInterval(tick,20000);
 setInterval(drawTodayRem,60000);
