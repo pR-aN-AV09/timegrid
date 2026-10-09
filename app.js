@@ -209,6 +209,7 @@ function fillEditor(){
   $('#fFreq').value=t.remFreq;$('#fRS').value=t.remStart;$('#fRE').value=t.remEnd;$('#fRD').value=t.remDays;$('#fBefore').value=Math.max(0,BEFORE.indexOf(t.remBefore||0));$('#fMonth').checked=t.showMonth!==false;$('#fYear').checked=t.showYear!==false;
   $('#delBtn').style.display=E.id?'':'none';$('#doneBtn').style.display=E.id?'':'none';
   $('#doneBtn').textContent=t.done?'Mark not done':'Mark done';
+  document.querySelectorAll('#modal .wheel').forEach(wheelSet);
   updateSummary();
 }
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;E.id=b.dataset.id||null;fillEditor()});
@@ -228,6 +229,32 @@ function updateSummary(){
     +(pre?` On the deadline day the last one rings ${pre}.`:'');
 }
 ['fPri','fFreq','fRS','fRE','fRD','fBefore','fDate','fTime'].forEach(id=>$('#'+id).addEventListener('input',updateSummary));
+/* number wheels: a scrolling list of numbers that writes into the hidden number input it sits next to */
+const WH=32; // row height, matches .wheel button in styles.css
+function wheelSet(w){
+  const inp=$('#'+w.dataset.for),v=Math.max(0,+inp.value||0),n=Math.max(+w.dataset.max,v); // a bigger saved value still gets a row
+  const wl=w.querySelector('.wl');
+  if(wl.children.length!==n+1)wl.innerHTML=Array.from({length:n+1},(_,i)=>`<button type="button" tabindex="-1">${i}</button>`).join('');
+  [...wl.children].forEach((b,i)=>b.classList.toggle('on',i===v));
+  wl.scrollTop=v*WH;
+}
+document.querySelectorAll('.wheel').forEach(w=>{
+  const inp=$('#'+w.dataset.for),wl=document.createElement('div');
+  wl.className='wl';wl.tabIndex=0;wl.setAttribute('role','listbox');wl.setAttribute('aria-labelledby',w.getAttribute('aria-labelledby'));
+  w.appendChild(wl);
+  const pick=()=>{
+    const i=Math.max(0,Math.min(wl.children.length-1,Math.round(wl.scrollTop/WH)));
+    [...wl.children].forEach((b,j)=>b.classList.toggle('on',j===i));
+    if(+inp.value!==i){inp.value=i;inp.dispatchEvent(new Event('input'))}
+  };
+  wl.addEventListener('scroll',pick,{passive:true});
+  wl.addEventListener('click',e=>{const b=e.target.closest('button');if(b)wl.scrollTo({top:[...wl.children].indexOf(b)*WH,behavior:'smooth'})});
+  wl.addEventListener('keydown',e=>{
+    const d=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0;if(!d)return;
+    e.preventDefault();wl.scrollTo({top:(Math.round(wl.scrollTop/WH)+d)*WH,behavior:'smooth'});
+  });
+  wheelSet(w);
+});
 const closeEditor=()=>{if(layer===$('#scrim'))hideLayer()};
 $('#cancelBtn').onclick=closeEditor;
 $('#scrim').addEventListener('mousedown',e=>{if(e.target.id==='scrim')closeEditor()});
@@ -383,6 +410,9 @@ $('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePref
 const CFG=window.TG_CONFIG||{};
 const cloudConfigured=!!(CFG.url&&CFG.anonKey&&!/YOUR_/.test(CFG.url+CFG.anonKey)&&window.supabase);
 let sb=null,session=null,channel=null,syncTimer=null,syncing=false,retryN=0,retryTimer=null;
+const WEB_URL=/^https?:$/.test(location.protocol)&&location.hostname!=='localhost'?location.origin+location.pathname:'https://pr-an-av09.github.io/timegrid/';
+// Opened from a "reset password" email: ask for a new password once the link has signed us in.
+let recovering=/type=recovery/.test(location.hash);
 if(cloudConfigured){sb=window.supabase.createClient(CFG.url,CFG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}
 
 function setStatus(kind,text){
@@ -459,6 +489,16 @@ function drawAcc(msg,isErr){
   const b=$('#accBody');
   if(!cloudConfigured){
     b.innerHTML=`<p>Sync is not set up yet, so tasks are saved only on this device.</p><p class="hint">To turn it on, add your Supabase URL and key to <b>config.js</b> (steps are in README.md), then reload.</p>`;
+  }else if(session&&recovering){
+    b.innerHTML=`<p>Choose a new password for <b>${esc(session.user.email||'')}</b>.</p>
+    <div class="field"><label for="aNew">New password</label><input type="password" id="aNew" autocomplete="new-password" placeholder="At least 6 characters"></div>
+    <div class="row"><button class="btn primary" id="newPassBtn">Save new password</button></div>
+    <p class="msg ${isErr?'err':''}">${esc(msg||'')}</p>`;
+    $('#newPassBtn').onclick=async()=>{
+      const {error}=await sb.auth.updateUser({password:$('#aNew').value});
+      if(error)return drawAcc(error.message,true);
+      recovering=false;drawAcc('Password changed. Use it to sign in to Timegrid on your phone.');
+    };
   }else if(session){
     b.innerHTML=`<p>Signed in as <b>${esc(session.user.email||'')}</b>.</p><p class="hint">Tasks sync automatically with every device signed in to this account.</p><div class="row"><button class="btn" id="syncBtn">Sync now</button><button class="btn danger" id="outBtn">Sign out</button></div><p class="msg ${isErr?'err':''}">${esc(msg||'')}</p>`;
     $('#syncBtn').onclick=()=>{syncNow().then(()=>drawAcc('Synced just now.'))};
@@ -466,8 +506,16 @@ function drawAcc(msg,isErr){
   }else{
     b.innerHTML=`<div class="field"><label for="aEmail">Email</label><input type="text" id="aEmail" autocomplete="email" inputmode="email"></div>
     <div class="field"><label for="aPass">Password</label><input type="password" id="aPass" autocomplete="current-password" placeholder="At least 6 characters"></div>
-    <div class="row"><button class="btn primary" id="inBtn">Sign in</button><button class="btn" id="upBtn">Create account</button></div>
+    <div class="row"><button class="btn primary" id="inBtn">Sign in</button><button class="btn" id="upBtn">Create account</button><button class="btn sm" id="forgotBtn">Forgot password?</button></div>
     <p class="msg ${isErr?'err':''}" id="aMsg">${esc(msg||'')}</p>`;
+    $('#forgotBtn').onclick=async()=>{
+      const email=$('#aEmail').value.trim();
+      if(!email)return drawAcc('Type your email above first, then tap "Forgot password?".',true);
+      // The link in the email opens the web version (the phone app has no web address of its own).
+      const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:WEB_URL});
+      if(error)return drawAcc(error.message,true);
+      drawAcc('If this email has an account, a reset link is on its way (check Spam too). Open it, choose a new password, then sign in here with it.');
+    };
     const creds=()=>({email:$('#aEmail').value.trim(),password:$('#aPass').value});
     $('#inBtn').onclick=async()=>{
       const {error}=await sb.auth.signInWithPassword(creds());
@@ -487,6 +535,9 @@ $('#accScrim').addEventListener('mousedown',e=>{if(e.target.id==='accScrim')clos
 if(sb){
   sb.auth.onAuthStateChange((ev,s)=>{
     session=s;
+    if(ev==='PASSWORD_RECOVERY')recovering=true;
+    if(recovering&&s&&!$('#accScrim').classList.contains('open'))setTimeout(()=>$('#accBtn').click());
+    if(ev==='SIGNED_OUT')recovering=false;
     if(s){subscribe();syncNow();if($('#accScrim').classList.contains('open'))drawAcc()}
     else{unsubscribe();if($('#accScrim').classList.contains('open'))drawAcc()}
     refreshStatus();
