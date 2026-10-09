@@ -3,7 +3,8 @@
   const C=window.Capacitor;
   const isNative=!!(C&&C.isNativePlatform&&C.isNativePlatform());
   let P=null;
-  if(isNative){try{P=C.registerPlugin('TimegridAlarm')}catch(e){P=null}}
+  // No build step, so @capacitor/core (registerPlugin) isn't loaded; native plugins are on Capacitor.Plugins.
+  if(isNative){try{P=(C.Plugins&&C.Plugins.TimegridAlarm)||(C.registerPlugin&&C.registerPlugin('TimegridAlarm'))||null}catch(e){P=null}}
   const call=async(fn,arg)=>{if(!P||!P[fn])throw new Error('native plugin missing: '+fn);return P[fn](arg||{})};
   window.TGNative={
     available:!!P,

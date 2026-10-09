@@ -1,0 +1,107 @@
+package app.timegrid.personal;
+
+import android.Manifest;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
+import androidx.core.app.NotificationManagerCompat;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+
+/** Native side of window.TGNative (see native.js). */
+@CapacitorPlugin(
+    name = "TimegridAlarm",
+    permissions = { @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notifications") }
+)
+public class TimegridAlarmPlugin extends Plugin {
+    static final int TEST_ALARM_ID = 0; // web alarm ids are always >= 1
+
+    @PluginMethod
+    public void testAlarm(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "testAlarmAfterPermission");
+            return;
+        }
+        scheduleTest(call);
+    }
+
+    @PermissionCallback
+    private void testAlarmAfterPermission(PluginCall call) {
+        // Ring even if notifications were refused: sound and vibration still work, only the screen won't pop up.
+        scheduleTest(call);
+    }
+
+    private void scheduleTest(PluginCall call) {
+        Context ctx = getContext();
+        if (!AlarmScheduler.canScheduleExact(ctx)) {
+            call.reject("Exact alarms are not allowed for Timegrid");
+            return;
+        }
+        int delay = Math.max(1, call.getInt("delaySeconds", 10));
+        long at = System.currentTimeMillis() + delay * 1000L;
+        try {
+            AlarmScheduler.scheduleOne(ctx, TEST_ALARM_ID, at, "Test alarm",
+                    "This is how Timegrid alarms ring. Slide to stop.", 1);
+        } catch (SecurityException e) {
+            call.reject("Exact alarms are not allowed for Timegrid", e);
+            return;
+        }
+        JSObject ret = new JSObject();
+        ret.put("at", at);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getStatus(PluginCall call) {
+        Context ctx = getContext();
+        JSObject ret = new JSObject();
+        ret.put("exactAlarmAllowed", AlarmScheduler.canScheduleExact(ctx));
+        boolean fullScreen = true;
+        if (Build.VERSION.SDK_INT >= 34) {
+            fullScreen = ctx.getSystemService(NotificationManager.class).canUseFullScreenIntent();
+        }
+        ret.put("fullScreenAllowed", fullScreen);
+        ret.put("notificationsAllowed", NotificationManagerCompat.from(ctx).areNotificationsEnabled());
+        PowerManager pm = ctx.getSystemService(PowerManager.class);
+        ret.put("batteryOptimizationIgnored", pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
+        ret.put("scheduledCount", 0); // real count arrives with schedule() in the next step
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        Context ctx = getContext();
+        String pkg = ctx.getPackageName();
+        Uri pkgUri = Uri.parse("package:" + pkg);
+        String page = call.getString("page", "");
+        Intent i;
+        if ("exactAlarm".equals(page) && Build.VERSION.SDK_INT >= 31) {
+            i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, pkgUri);
+        } else if ("fullScreen".equals(page) && Build.VERSION.SDK_INT >= 34) {
+            i = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkgUri);
+        } else if ("notifications".equals(page) && Build.VERSION.SDK_INT >= 26) {
+            i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg);
+        } else {
+            // Battery (and fallback): the app's info page, where Samsung has Battery > Unrestricted.
+            i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri);
+        }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            ctx.startActivity(i);
+        } catch (Exception e) {
+            ctx.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }
+        call.resolve();
+    }
+}
