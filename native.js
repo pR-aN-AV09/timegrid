@@ -12,6 +12,7 @@
     cancelAll:()=>call('cancelAll'),
     getStatus:()=>call('getStatus'),
     openSettings:page=>call('openSettings',{page}),
+    pickSound:()=>call('pickSound'),
     testAlarm:delaySeconds=>call('testAlarm',{delaySeconds:delaySeconds||10})
   };
 })();

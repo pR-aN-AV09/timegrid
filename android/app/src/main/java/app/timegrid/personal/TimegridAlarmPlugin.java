@@ -1,7 +1,10 @@
 package app.timegrid.personal;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.NotificationManager;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -103,6 +106,7 @@ public class TimegridAlarmPlugin extends Plugin {
         PowerManager pm = ctx.getSystemService(PowerManager.class);
         ret.put("batteryOptimizationIgnored", pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
         ret.put("scheduledCount", AlarmStore.load(ctx).length());
+        ret.put("soundName", soundName(ctx));
         call.resolve(ret);
     }
 
@@ -139,5 +143,46 @@ public class TimegridAlarmPlugin extends Plugin {
     @ActivityCallback
     private void settingsClosed(PluginCall call, ActivityResult result) {
         call.resolve();
+    }
+
+    /** Opens Android's alarm-sound list; the choice is used for every Timegrid alarm. */
+    @PluginMethod
+    public void pickSound(PluginCall call) {
+        Context ctx = getContext();
+        String current = AlarmStore.sound(ctx);
+        Intent i = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Timegrid alarm sound")
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, Settings.System.DEFAULT_ALARM_ALERT_URI)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                        current == null ? Settings.System.DEFAULT_ALARM_ALERT_URI : Uri.parse(current));
+        startActivityForResult(call, i, "soundPicked");
+    }
+
+    @ActivityCallback
+    private void soundPicked(PluginCall call, ActivityResult result) {
+        Intent data = result.getData();
+        if (result.getResultCode() == Activity.RESULT_OK && data != null) {
+            Uri u = data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
+            // "Default" (or nothing) means: follow the phone's default alarm sound.
+            boolean followDefault = u == null || Settings.System.DEFAULT_ALARM_ALERT_URI.equals(u);
+            AlarmStore.setSound(getContext(), followDefault ? null : u.toString());
+        }
+        JSObject ret = new JSObject();
+        ret.put("soundName", soundName(getContext()));
+        call.resolve(ret);
+    }
+
+    static String soundName(Context ctx) {
+        String picked = AlarmStore.sound(ctx);
+        Uri u = picked == null ? AlarmService.defaultAlarmSound(ctx) : Uri.parse(picked);
+        try {
+            Ringtone r = RingtoneManager.getRingtone(ctx, u);
+            String title = r == null ? null : r.getTitle(ctx);
+            if (title != null) return picked == null ? title + " (phone default)" : title;
+        } catch (Exception ignored) {}
+        return picked == null ? "Phone default" : "Custom sound";
     }
 }

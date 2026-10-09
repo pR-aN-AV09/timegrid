@@ -109,17 +109,10 @@ public class AlarmService extends Service {
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
-        try {
-            player = new MediaPlayer();
-            player.setAudioAttributes(attrs);
-            player.setDataSource(this, alarmSound());
-            player.setLooping(true);
-            player.prepare();
-            player.start();
-        } catch (Exception e) {
-            if (player != null) player.release();
-            player = null;
-        }
+        // The sound picked in Timegrid's settings; if it can't be played (e.g. the file was removed),
+        // fall back to the phone's default alarm sound rather than ringing silently.
+        String picked = AlarmStore.sound(this);
+        if (picked == null || !play(Uri.parse(picked), attrs)) play(defaultAlarmSound(this), attrs);
 
         if (Build.VERSION.SDK_INT >= 31) {
             vibrator = getSystemService(VibratorManager.class).getDefaultVibrator();
@@ -133,8 +126,24 @@ public class AlarmService extends Service {
         }
     }
 
-    private Uri alarmSound() {
-        Uri u = RingtoneManager.getActualDefaultRingtoneUri(this, RingtoneManager.TYPE_ALARM);
+    private boolean play(Uri sound, AudioAttributes attrs) {
+        try {
+            player = new MediaPlayer();
+            player.setAudioAttributes(attrs);
+            player.setDataSource(this, sound);
+            player.setLooping(true);
+            player.prepare();
+            player.start();
+            return true;
+        } catch (Exception e) {
+            if (player != null) player.release();
+            player = null;
+            return false;
+        }
+    }
+
+    static Uri defaultAlarmSound(Context ctx) {
+        Uri u = RingtoneManager.getActualDefaultRingtoneUri(ctx, RingtoneManager.TYPE_ALARM);
         if (u == null) u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
         if (u == null) u = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
         return u;

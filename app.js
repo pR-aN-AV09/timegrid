@@ -172,10 +172,21 @@ function hideLayer(){
   try{history.back()}catch(e){}
 }
 window.addEventListener('popstate',()=>{if(layer){layer.classList.remove('open');layer=null}});
+// Touching a slider or switch while a text box still has the cursor would make a phone show the
+// keyboard again; take the cursor out of the text box first.
+const TEXTY='textarea,input[type=text],input[type=number]';
+document.addEventListener('pointerdown',e=>{
+  const a=document.activeElement;
+  if(a&&a.matches&&a.matches(TEXTY)&&!(e.target.closest&&e.target.closest(TEXTY)))a.blur();
+},true);
+// Called by the Android app's Back button: close the open pop-up, or say there was none.
+window.tgBack=()=>{if(!layer)return false;hideLayer();return true};
 
 /* ================= task editor ================= */
 let E={date:null,id:null};
-function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:0,showMonth:S.defMonth,showYear:S.defYear,done:false}}
+const BEFORE=[0,5,10,15,30,60];
+const fmtBefore=m=>!m?'Off':m<60?m+' min':'1 hr';
+function blank(date){return{id:uid(),title:'',notes:'',date,time:'17:00',priority:5,remFreq:0,remStart:'09:00',remEnd:'20:00',remDays:0,remBefore:0,showMonth:S.defMonth,showYear:S.defYear,done:false}}
 function openEditor(date,id,originEl){
   if(id){const t=tasks.find(x=>x.id===id);if(!t||t.deleted)return;E.date=t.date;E.id=id}
   else{E.date=date;E.id=null}
@@ -195,7 +206,7 @@ function fillEditor(){
   const t=E.id?tasks.find(x=>x.id===E.id):blank(E.date);
   $('#fPri').value=t.priority;$('#pOut').textContent=t.priority;
   $('#fTitle').value=t.title;$('#fNotes').value=t.notes;$('#fDate').value=t.date;$('#fTime').value=t.time||'17:00';
-  $('#fFreq').value=t.remFreq;$('#fRS').value=t.remStart;$('#fRE').value=t.remEnd;$('#fRD').value=t.remDays;$('#fMonth').checked=t.showMonth!==false;$('#fYear').checked=t.showYear!==false;
+  $('#fFreq').value=t.remFreq;$('#fRS').value=t.remStart;$('#fRE').value=t.remEnd;$('#fRD').value=t.remDays;$('#fBefore').value=Math.max(0,BEFORE.indexOf(t.remBefore||0));$('#fMonth').checked=t.showMonth!==false;$('#fYear').checked=t.showYear!==false;
   $('#delBtn').style.display=E.id?'':'none';$('#doneBtn').style.display=E.id?'':'none';
   $('#doneBtn').textContent=t.done?'Mark not done':'Mark done';
   updateSummary();
@@ -204,16 +215,19 @@ $('#tabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)r
 function formTask(){
   return{id:E.id||uid(),title:$('#fTitle').value.trim(),notes:$('#fNotes').value,date:$('#fDate').value||E.date,time:$('#fTime').value||'17:00',
     priority:+$('#fPri').value,remFreq:Math.max(0,Math.min(30,+$('#fFreq').value||0)),remStart:$('#fRS').value||'09:00',remEnd:$('#fRE').value||'20:00',
-    remDays:Math.max(0,Math.min(365,+$('#fRD').value||0)),showMonth:$('#fMonth').checked,showYear:$('#fYear').checked,done:E.id?!!tasks.find(x=>x.id===E.id).done:false};
+    remDays:Math.max(0,Math.min(365,+$('#fRD').value||0)),remBefore:BEFORE[+$('#fBefore').value]||0,showMonth:$('#fMonth').checked,showYear:$('#fYear').checked,done:E.id?!!tasks.find(x=>x.id===E.id).done:false};
 }
 function updateSummary(){
   $('#pOut').textContent=$('#fPri').value;fillRng();
   const t=formTask();
-  if(!t.remFreq){$('#remSummary').textContent='Reminders are off. Set a frequency above 0 to turn them on.';return}
+  $('#bOut').textContent=fmtBefore(t.remBefore);
+  const pre=t.remBefore?fmtBefore(t.remBefore)+' before the deadline':'';
+  if(!t.remFreq){$('#remSummary').textContent=pre?`One reminder ${pre}.`:'Reminders are off. Set a frequency above 0 or pick a "remind me before" time to turn them on.';return}
   const days=t.remDays+1;
-  $('#remSummary').textContent=`${t.remFreq} reminder${t.remFreq>1?'s':''} a day at random times between ${t.remStart} and ${t.remEnd}, for ${days} day${days>1?'s':''} up to the deadline (${t.remFreq*days} in total at most).`;
+  $('#remSummary').textContent=`${t.remFreq} reminder${t.remFreq>1?'s':''} a day at random times between ${t.remStart} and ${t.remEnd}, for ${days} day${days>1?'s':''} up to the deadline (${t.remFreq*days} in total at most).`
+    +(pre?` On the deadline day the last one rings ${pre}.`:'');
 }
-['fPri','fFreq','fRS','fRE','fRD','fDate','fTime'].forEach(id=>$('#'+id).addEventListener('input',updateSummary));
+['fPri','fFreq','fRS','fRE','fRD','fBefore','fDate','fTime'].forEach(id=>$('#'+id).addEventListener('input',updateSummary));
 const closeEditor=()=>{if(layer===$('#scrim'))hideLayer()};
 $('#cancelBtn').onclick=closeEditor;
 $('#scrim').addEventListener('mousedown',e=>{if(e.target.id==='scrim')closeEditor()});
@@ -233,14 +247,21 @@ function hash(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.im
 function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const toMin=s=>{const [h,m]=(s||'0:0').split(':').map(Number);return h*60+m};
 function remindersFor(t){
-  if(!t.remFreq||t.done||t.deleted)return[];
+  const before=t.remBefore||0;
+  if((!t.remFreq&&!before)||t.done||t.deleted)return[];
   const out=[],dl=new Date(t.date+'T00:00'),dlMin=toMin(t.time);
-  for(let d=0;d<=t.remDays;d++){
+  // "Remind me before": one reminder that many minutes before the deadline. On the deadline day it
+  // counts as the last of the daily reminders, so the random ones fall before it.
+  if(before){
+    const min=dlMin-before,k=dkey(dl);
+    out.push({key:t.id+'|'+k+'|'+min,at:new Date(dl.getFullYear(),dl.getMonth(),dl.getDate(),0,min),task:t});
+  }
+  for(let d=0;d<=t.remDays&&t.remFreq;d++){
     const day=new Date(dl.getFullYear(),dl.getMonth(),dl.getDate()-d),k=dkey(day);
     const a=toMin(t.remStart);let b=toMin(t.remEnd);
-    if(d===0)b=Math.min(b,dlMin);
+    if(d===0)b=Math.min(b,before?dlMin-before:dlMin);
     if(b<=a)continue;
-    const span=b-a,want=Math.min(t.remFreq,span),r=rng(hash(t.id+'|'+k)),set=new Set();
+    const span=b-a,want=Math.min(d===0&&before?t.remFreq-1:t.remFreq,span),r=rng(hash(t.id+'|'+k)),set=new Set();
     let guard=0;while(set.size<want&&guard++<500)set.add(a+Math.floor(r()*span));
     [...set].sort((x,y)=>x-y).forEach(min=>out.push({key:t.id+'|'+k+'|'+min,at:new Date(day.getFullYear(),day.getMonth(),day.getDate(),0,min),task:t}));
   }
@@ -312,6 +333,7 @@ async function refreshAlarmUI(){
   if(st.exactAlarmAllowed===false)bad.push(['exactAlarm','Allow exact alarms']);
   if(st.fullScreenAllowed===false)bad.push(['fullScreen','Allow full-screen alerts']);
   if(st.notificationsAllowed===false)bad.push(['notifications','Allow notifications']);
+  if(st.soundName)$('#alarmSoundName').textContent=st.soundName;
   $('#sOverlay').checked=st.overlayAllowed!==false;
   $('#sBattery').checked=st.batteryOptimizationIgnored!==false;
   $('#alarmState').textContent=(st.scheduledCount!=null?st.scheduledCount+' alarm(s) scheduled in the next '+ALARM_DAYS+' days. ':'')+(bad.length?'Fix the items below so alarms always ring.':'All permissions look good.');
@@ -349,6 +371,7 @@ $('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
 document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
 $('#sAlarms').addEventListener('change',e=>{S.alarms=e.target.checked;savePrefs();pushAlarms()});
 // Android won't let an app flip these itself: show the real state and open the system page/pop-up instead.
+$('#alarmSound').onclick=()=>TGNative.pickSound().then(r=>{if(r&&r.soundName)$('#alarmSoundName').textContent=r.soundName}).catch(()=>{});
 $('#sOverlay').addEventListener('change',e=>{e.target.checked=!e.target.checked;TGNative.openSettings('overlay').finally(refreshAlarmUI)});
 $('#sBattery').addEventListener('change',e=>{const on=e.target.checked;e.target.checked=!on;TGNative.openSettings(on?'batteryRequest':'battery').finally(refreshAlarmUI)});
 $('#sLine').addEventListener('change',e=>{S.line=e.target.checked;savePrefs();drawPlot()});

@@ -186,6 +186,8 @@ html,body{overflow-x:hidden}
 
 .row.nowrap .rng{flex:1;min-width:0}
 .prio .rng{margin-top:6px}
+.prio.before{margin-top:0}
+.prio.before .big output{font-size:18px}
 fieldset{min-width:0}
 .g2>*,.g3>*{min-width:0}
 .g2,.g3{grid-template-columns:repeat(var(--cols,2),minmax(0,1fr))}

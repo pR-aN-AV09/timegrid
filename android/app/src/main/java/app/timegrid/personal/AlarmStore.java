@@ -29,6 +29,15 @@ public final class AlarmStore {
         prefs(ctx).edit().putString(KEY, alarms.toString()).apply();
     }
 
+    /** The alarm sound picked in Timegrid's settings, or null for the phone's default alarm sound. */
+    public static String sound(Context ctx) {
+        return prefs(ctx).getString("sound", null);
+    }
+
+    public static void setSound(Context ctx, String uri) {
+        prefs(ctx).edit().putString("sound", uri).apply();
+    }
+
     /** Drops one alarm (after it has rung) so the count stays right and it isn't rescheduled at boot. */
     public static synchronized void remove(Context ctx, int id) {
         JSONArray all = load(ctx), kept = new JSONArray();
