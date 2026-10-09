@@ -17,7 +17,7 @@
   <header class="top">
     <h1>Timegrid<small>See what's due, and how much it matters.</small></h1>
     <div class="row">
-      <span class="status" id="status"><i></i><span id="statusTxt">Local only</span></span>
+      <button type="button" class="status" id="status" aria-label="Account and sync"><i></i><span id="statusTxt">Local only</span></button>
       <button class="btn primary" id="newBtn">New task</button>
       <button class="btn" id="accBtn" aria-label="Settings"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="10" cy="4" r="1.7" fill="var(--panel)"/><circle cx="5" cy="8" r="1.7" fill="var(--panel)"/><circle cx="11" cy="12" r="1.7" fill="var(--panel)"/></svg><span class="lbl">Settings</span></button>
     </div>
@@ -44,6 +44,7 @@
         <b id="dLabel"></b>
         <button class="btn sm" id="dNext" aria-label="Next">›</button>
         <button class="btn sm" id="dToday">Today</button>
+        <label class="btn sm datepick" aria-label="Pick a date"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg><input type="date" id="dPick" tabindex="-1"></label>
       </div>
     </header>
     <svg id="plot" viewBox="0 0 900 380" role="img" aria-label="Tasks plotted by time and priority"></svg>
@@ -53,7 +54,7 @@
   </section>
 
   <section class="card">
-    <header><h2>Today's reminders</h2></header>
+    <header><h2 id="remH">Today's reminders</h2></header>
     <div id="todayRem" class="rem"></div>
     <p class="hint" style="margin-top:10px">Reminder times are picked at random inside each task's time window, and are the same on every device you sign in on.</p>
   </section>

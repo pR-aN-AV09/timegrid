@@ -120,13 +120,20 @@ window.addEventListener('resize',()=>{clearTimeout(rsz);rsz=setTimeout(()=>{cons
 $('#plot').addEventListener('click',e=>{const id=e.target.dataset&&e.target.dataset.id;if(id)openEditor(null,id)});
 $('#plot').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset.id)openEditor(null,e.target.dataset.id)});
 $('#dList').addEventListener('click',e=>{const it=e.target.closest('.titem');if(it)openEditor(null,it.dataset.id)});
-function shift(dir){S.follow=false;const a=S.anchor;
-  if(S.scale===0)S.anchor=new Date(a.getFullYear(),a.getMonth(),a.getDate()+dir);
-  else if(S.scale===1)S.anchor=new Date(a.getFullYear(),a.getMonth()+dir,1);
-  else S.anchor=new Date(a.getFullYear()+dir,0,1);
-  drawPlot()}
+// S.anchor is also the dashboard's selected day (its reminders are listed below), so month and
+// year steps keep the day of the month (31 Jan -> 28 Feb).
+function shift(dir){const a=S.anchor,y=a.getFullYear(),m=a.getMonth(),d=a.getDate();
+  const keep=(yy,mm)=>new Date(yy,mm,Math.min(d,new Date(yy,mm+1,0).getDate()));
+  if(S.scale===0)setDay(new Date(y,m,d+dir));
+  else if(S.scale===1)setDay(keep(y,m+dir));
+  else setDay(keep(y+dir,m))}
+function setDay(day){S.anchor=day;S.follow=dkey(day)===dkey(new Date());drawPlot();drawTodayRem()}
 $('#dPrev').onclick=()=>shift(-1);$('#dNext').onclick=()=>shift(1);
-$('#dToday').onclick=()=>{S.anchor=new Date();S.follow=true;drawPlot()};
+$('#dToday').onclick=()=>setDay(new Date());
+const dPick=$('#dPick');
+dPick.addEventListener('click',e=>{dPick.value=dkey(S.anchor);try{dPick.showPicker();e.preventDefault()}catch(err){}});
+dPick.addEventListener('focus',()=>{if(!dPick.value)dPick.value=dkey(S.anchor)});
+dPick.addEventListener('change',()=>{if(dPick.value)setDay(new Date(dPick.value+'T00:00'))});
 
 /* ================= sliders ================= */
 function buildRng(){document.querySelectorAll('.rng').forEach(r=>{const n=+r.dataset.n;r.querySelector('.stops').innerHTML=Array.from({length:n},(_,i)=>`<i style="left:calc(10px + (100% - 20px) * ${i/(n-1)})"></i>`).join('')})}
@@ -295,10 +302,12 @@ function remindersFor(t){
   return out;
 }
 const allReminders=()=>tasks.flatMap(remindersFor);
-function drawTodayRem(){
-  const k=dkey(new Date()),now=Date.now();
+function drawTodayRem(){ // reminders of the dashboard's selected day
+  const k=dkey(S.anchor),isToday=k===dkey(new Date()),now=Date.now();
   const list=allReminders().filter(r=>dkey(r.at)===k).sort((a,b)=>a.at-b.at);
-  $('#todayRem').innerHTML=list.length?list.map(r=>`<span class="rtag ${r.at<now?'past':''}"><b>${pad(r.at.getHours())}:${pad(r.at.getMinutes())}</b> ${esc(r.task.title||'Untitled')}</span>`).join(''):'<span class="hint">No reminders scheduled for today.</span>';
+  const when=isToday?'today':'on '+S.anchor.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'});
+  $('#remH').textContent=isToday?"Today's reminders":'Reminders · '+S.anchor.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:S.anchor.getFullYear()===new Date().getFullYear()?undefined:'numeric'});
+  $('#todayRem').innerHTML=list.length?list.map(r=>`<span class="rtag ${r.at<now?'past':''}"><b>${pad(r.at.getHours())}:${pad(r.at.getMinutes())}</b> ${esc(r.task.title||'Untitled')}</span>`).join(''):`<span class="hint">No reminders scheduled ${when}.</span>`;
 }
 function toast(title,body,persist){
   const el=document.createElement('div');el.className='toast';el.innerHTML=`<b>${esc(title)}</b>${esc(body||'')}`;
@@ -486,7 +495,7 @@ window.addEventListener('focus',()=>{refreshClock();tick()});
 /* account dialog */
 function closeAcc(){if(layer===$('#accScrim'))hideLayer()}
 function drawAcc(msg,isErr){
-  const b=$('#accBody');
+  const b=$('#accBody'),keepEmail=($('#aEmail')||{}).value||''; // keep a typed email when a message redraws the form
   if(!cloudConfigured){
     b.innerHTML=`<p>Sync is not set up yet, so tasks are saved only on this device.</p><p class="hint">To turn it on, add your Supabase URL and key to <b>config.js</b> (steps are in README.md), then reload.</p>`;
   }else if(session&&recovering){
@@ -508,6 +517,7 @@ function drawAcc(msg,isErr){
     <div class="field"><label for="aPass">Password</label><input type="password" id="aPass" autocomplete="current-password" placeholder="At least 6 characters"></div>
     <div class="row"><button class="btn primary" id="inBtn">Sign in</button><button class="btn" id="upBtn">Create account</button><button class="btn sm" id="forgotBtn">Forgot password?</button></div>
     <p class="msg ${isErr?'err':''}" id="aMsg">${esc(msg||'')}</p>`;
+    $('#aEmail').value=keepEmail;
     $('#forgotBtn').onclick=async()=>{
       const email=$('#aEmail').value.trim();
       if(!email)return drawAcc('Type your email above first, then tap "Forgot password?".',true);
@@ -517,11 +527,14 @@ function drawAcc(msg,isErr){
       drawAcc('If this email has an account, a reset link is on its way (check Spam too). Open it, choose a new password, then sign in here with it.');
     };
     const creds=()=>({email:$('#aEmail').value.trim(),password:$('#aPass').value});
+    const noEmail=()=>{if($('#aEmail').value.trim())return false;drawAcc('Type your email first.',true);return true};
     $('#inBtn').onclick=async()=>{
+      if(noEmail())return;
       const {error}=await sb.auth.signInWithPassword(creds());
       if(error)drawAcc(error.message,true);else drawAcc('Signed in.');
     };
     $('#upBtn').onclick=async()=>{
+      if(noEmail())return;
       const {data,error}=await sb.auth.signUp(creds());
       if(error)return drawAcc(error.message,true);
       if(!data.session)drawAcc('Account created. Check your email to confirm it, then sign in.');else drawAcc('Signed in.');
@@ -529,6 +542,11 @@ function drawAcc(msg,isErr){
   }
 }
 $('#accBtn').onclick=()=>{drawAcc();syncSettings();updateNotifBtn();showLayer($('#accScrim'))};
+// The sync pill (Signed out / Synced) opens Settings at Account and sync.
+$('#status').onclick=()=>{
+  $('#accBtn').click();$('#accBody').closest('.sset').scrollIntoView({block:'start'});
+  if(!session&&$('#aEmail')&&window.matchMedia&&matchMedia('(pointer:fine)').matches)$('#aEmail').focus();
+};
 $('#accClose').onclick=closeAcc;
 $('#accScrim').addEventListener('mousedown',e=>{if(e.target.id==='accScrim')closeAcc()});
 

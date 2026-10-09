@@ -212,3 +212,11 @@ fieldset{min-width:0}
 .wheel:focus-within{border-color:var(--accent)}
 .wheel button{display:block;width:100%;height:32px;padding:0;border:0;background:none;font:inherit;font-size:16px;color:var(--muted);font-variant-numeric:tabular-nums;scroll-snap-align:center;cursor:pointer}
 .wheel button.on{color:var(--ink);font-weight:700}
+
+/* sync status pill opens Account and sync */
+button.status{font:inherit;font-size:12.5px;cursor:pointer}
+button.status:hover{border-color:var(--accent)}
+/* dashboard date picker: the real date input sits invisibly over the calendar button */
+.datepick{position:relative;display:inline-flex;align-items:center;cursor:pointer;overflow:hidden}
+.datepick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;cursor:pointer}
+.datepick input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
