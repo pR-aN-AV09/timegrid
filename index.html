@@ -133,6 +133,13 @@
       <p class="hint" id="notifState"></p>
       <div class="row"><button class="btn sm" id="notifEnable">Enable notifications</button><button class="btn sm" id="notifTest">Send test</button></div>
     </section>
+    <section class="sset" id="alarmSec" hidden>
+      <h4>Phone alarms</h4>
+      <p class="hint" id="alarmState"></p>
+      <label class="tgl"><span>Ring an alarm for every reminder</span><input type="checkbox" id="sAlarms" role="switch" checked><span class="sw"></span></label>
+      <div class="row" id="alarmFix"></div>
+      <div class="row"><button class="btn sm" id="alarmTest">Test alarm in 10 s</button></div>
+    </section>
     <section class="sset">
       <h4>Theme</h4>
       <div class="seg" role="radiogroup" aria-label="Theme">
@@ -160,6 +167,7 @@
 
 <script src="./vendor/supabase.js"></script>
 <script src="./config.js"></script>
+<script src="./native.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>

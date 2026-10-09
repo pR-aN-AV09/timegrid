@@ -15,10 +15,10 @@ let tasks=ls('tg_tasks',[]);           // includes deleted tombstones (needed fo
 let dirty=new Set(ls('tg_dirty',[]));  // ids waiting to upload
 let fired=ls('tg_fired',{});
 const prefs=ls('tg_prefs',{});
-const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1),follow:true,calFollow:true};
+const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,alarms:prefs.alarms!==false,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1),follow:true,calFollow:true};
 const live=()=>tasks.filter(t=>!t.deleted);
-const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty])};
-const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear,line:S.line});
+const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty]);queueAlarms()};
+const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear,line:S.line,alarms:S.alarms});
 function applyTheme(v){const r=document.documentElement;if(v)r.dataset.theme=v;else delete r.dataset.theme}
 applyTheme(S.theme);
 
@@ -258,6 +258,7 @@ function toast(title,body,persist){
   setTimeout(()=>el.remove(),persist?15000:3000);
 }
 async function systemNotify(title,body){
+  if(nativeAlarmsOn()&&!arguments[2])return; // phone alarms replace web notifications
   try{
     if(!('Notification' in window)||Notification.permission!=='granted')return;
     // Service-worker notifications are required on Android and work on desktop too.
@@ -282,6 +283,40 @@ function tick(){
     ss('tg_fired',fired);drawTodayRem();
   }
 }
+/* ================= phone alarms (Android app only) ================= */
+const ALARM_DAYS=14,ALARM_CAP=400;
+const nativeAlarmsOn=()=>!!(window.TGNative&&TGNative.available&&S.alarms);
+const alarmId=k=>(hash(k)%2000000000)+1;
+function alarmList(){
+  const now=Date.now(),end=now+ALARM_DAYS*864e5;
+  return allReminders().filter(r=>r.at>now&&r.at<=end).sort((a,b)=>a.at-b.at).slice(0,ALARM_CAP).map(r=>({
+    id:alarmId(r.key),at:r.at.getTime(),title:r.task.title||'Untitled',
+    body:`Priority ${r.task.priority} · due ${r.task.date} ${r.task.time||''}`.trim(),priority:r.task.priority||5}));
+}
+let alarmTimer=null;
+function queueAlarms(){
+  if(!(window.TGNative&&TGNative.available))return;
+  clearTimeout(alarmTimer);alarmTimer=setTimeout(pushAlarms,800);
+}
+async function pushAlarms(){
+  if(!(window.TGNative&&TGNative.available))return;
+  try{ if(S.alarms)await TGNative.schedule(alarmList()); else await TGNative.cancelAll(); }catch(e){console.warn('alarm sync failed',e)}
+  refreshAlarmUI();
+}
+async function refreshAlarmUI(){
+  const box=$('#alarmSec');if(!box)return;
+  if(!(window.TGNative&&TGNative.available)){box.hidden=true;return}
+  box.hidden=false;$('#sAlarms').checked=S.alarms;
+  let st={};try{st=await TGNative.getStatus()}catch(e){}
+  const bad=[];
+  if(st.exactAlarmAllowed===false)bad.push(['exactAlarm','Allow exact alarms']);
+  if(st.fullScreenAllowed===false)bad.push(['fullScreen','Allow full-screen alerts']);
+  if(st.notificationsAllowed===false)bad.push(['notifications','Allow notifications']);
+  if(st.batteryOptimizationIgnored===false)bad.push(['battery','Remove battery limits']);
+  $('#alarmState').textContent=(st.scheduledCount!=null?st.scheduledCount+' alarm(s) scheduled in the next '+ALARM_DAYS+' days. ':'')+(bad.length?'Fix the items below so alarms always ring.':'All permissions look good.');
+  $('#alarmFix').innerHTML=bad.map(b=>`<button class="btn sm" data-page="${b[0]}">${b[1]}</button>`).join('');
+  $('#alarmFix').querySelectorAll('button').forEach(b=>b.onclick=()=>TGNative.openSettings(b.dataset.page));
+}
 /* ================= settings window ================= */
 function updateNotifBtn(){
   const st=$('#notifState'),en=$('#notifEnable'),te=$('#notifTest');
@@ -302,6 +337,7 @@ $('#notifEnable').onclick=()=>{
 $('#notifTest').onclick=()=>{toast('Test reminder','This is how a reminder looks.',true);systemNotify('Timegrid','This is how a reminder looks.')};
 
 function syncSettings(){
+  refreshAlarmUI();
   const narrow=(document.querySelector('#plot').parentElement.clientWidth||900)<560,def=narrow?10:11;
   $('#sDot').value=S.dot||def;$('#sDotOut').textContent=S.dot?S.dot+' px':'Default ('+def+' px)';
   document.querySelectorAll('input[name=theme]').forEach(r=>r.checked=r.value===S.theme);
@@ -310,6 +346,8 @@ function syncSettings(){
 $('#sDot').addEventListener('input',e=>{fillRng();S.dot=+e.target.value;$('#sDotOut').textContent=S.dot+' px';savePrefs();drawPlot()});
 $('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
 document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
+$('#sAlarms').addEventListener('change',e=>{S.alarms=e.target.checked;savePrefs();pushAlarms()});
+$('#alarmTest').onclick=()=>TGNative.testAlarm(10).then(()=>toast('Test alarm','Rings in 10 seconds. Lock the phone to test properly.')).catch(()=>{});
 $('#sLine').addEventListener('change',e=>{S.line=e.target.checked;savePrefs();drawPlot()});
 $('#sDefMonth').addEventListener('change',e=>{S.defMonth=e.target.checked;savePrefs()});
 $('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePrefs()});
@@ -441,7 +479,7 @@ function refreshClock(){
 }
 let lastBeat=Date.now();
 setInterval(()=>{const gap=Date.now()-lastBeat;lastBeat=Date.now();refreshClock();if(gap>90000){tick();queueSync()}},30000);  // a long gap means the PC slept
-buildRng();syncSliders();render();updateNotifBtn();refreshStatus();tick();
+buildRng();syncSliders();render();updateNotifBtn();refreshStatus();tick();queueAlarms();
 setInterval(tick,20000);
 setInterval(drawTodayRem,60000);
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}))}

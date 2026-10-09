@@ -1,0 +1,6 @@
+{
+  "appId": "app.timegrid.personal",
+  "appName": "Timegrid",
+  "webDir": "android-www",
+  "server": { "androidScheme": "https" }
+}

@@ -1,6 +1,6 @@
 // Bump VERSION whenever you change any app file so installed copies refresh.
-const VERSION = 'timegrid-v8';
-const SHELL = ['./','./index.html','./styles.css','./app.js','./config.js','./vendor/supabase.js',
+const VERSION = 'timegrid-v9';
+const SHELL = ['./','./index.html','./styles.css','./app.js','./native.js','./config.js','./vendor/supabase.js',
   './manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 
 self.addEventListener('install', e => {
