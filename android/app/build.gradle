@@ -16,8 +16,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Release signing key lives outside the repo (never commit it). Override the path with -PtimegridKeys=...
+    def keyPropsFile = file(project.findProperty('timegridKeys') ?: 'D:/timegrid-keys/keystore.properties')
+    def keyProps = new Properties()
+    if (keyPropsFile.exists()) keyPropsFile.withInputStream { keyProps.load(it) }
+    signingConfigs {
+        release {
+            if (keyPropsFile.exists()) {
+                storeFile file(keyProps['storeFile'])
+                storePassword keyProps['storePassword']
+                keyAlias keyProps['keyAlias']
+                keyPassword keyProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keyPropsFile.exists()) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
