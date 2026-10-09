@@ -18,6 +18,7 @@ import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.provider.Settings;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 
@@ -48,17 +49,31 @@ public class AlarmService extends Service {
         String body = intent.getStringExtra(AlarmScheduler.EXTRA_BODY);
         int priority = intent.getIntExtra(AlarmScheduler.EXTRA_PRIORITY, 5);
 
-        Notification n = buildNotification(title, body, priority);
+        Intent open = alarmScreen(title, body, priority);
+        Notification n = buildNotification(title, body, open);
         if (Build.VERSION.SDK_INT >= 34) {
             ServiceCompat.startForeground(this, NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED);
         } else {
             startForeground(NOTIF_ID, n);
         }
         startRinging(); // no-op if already ringing; a second alarm just replaces the text
+        // With "Appear on top" allowed, take over the screen even while the phone is in use.
+        // Without it, Android shows the full-screen notification as a banner instead.
+        if (Settings.canDrawOverlays(this)) {
+            try { startActivity(open); } catch (Exception ignored) {}
+        }
         return START_NOT_STICKY;
     }
 
-    private Notification buildNotification(String title, String body, int priority) {
+    private Intent alarmScreen(String title, String body, int priority) {
+        return new Intent(this, AlarmActivity.class)
+                .putExtra(AlarmScheduler.EXTRA_TITLE, title)
+                .putExtra(AlarmScheduler.EXTRA_BODY, body)
+                .putExtra(AlarmScheduler.EXTRA_PRIORITY, priority)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+    }
+
+    private Notification buildNotification(String title, String body, Intent open) {
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL_ID) == null) {
             NotificationChannel ch = new NotificationChannel(CHANNEL_ID, "Alarms", NotificationManager.IMPORTANCE_HIGH);
@@ -68,11 +83,6 @@ public class AlarmService extends Service {
             ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(ch);
         }
-        Intent open = new Intent(this, AlarmActivity.class)
-                .putExtra(AlarmScheduler.EXTRA_TITLE, title)
-                .putExtra(AlarmScheduler.EXTRA_BODY, body)
-                .putExtra(AlarmScheduler.EXTRA_PRIORITY, priority)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
         PendingIntent full = PendingIntent.getActivity(this, 1, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new NotificationCompat.Builder(this, CHANNEL_ID)

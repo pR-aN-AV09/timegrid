@@ -65,6 +65,8 @@
     <!-- Ringing screen over the lock screen, and the alarm notification -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- "Appear on top": lets the alarm screen take over while the phone is in use (otherwise it is a banner) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Keep ringing in the background (systemExempted is allowed for apps holding an exact-alarm permission) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />

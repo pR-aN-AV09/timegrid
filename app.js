@@ -311,6 +311,7 @@ async function refreshAlarmUI(){
   const bad=[];
   if(st.exactAlarmAllowed===false)bad.push(['exactAlarm','Allow exact alarms']);
   if(st.fullScreenAllowed===false)bad.push(['fullScreen','Allow full-screen alerts']);
+  if(st.overlayAllowed===false)bad.push(['overlay','Allow alarm screen over other apps']);
   if(st.notificationsAllowed===false)bad.push(['notifications','Allow notifications']);
   if(st.batteryOptimizationIgnored===false)bad.push(['battery','Remove battery limits']);
   $('#alarmState').textContent=(st.scheduledCount!=null?st.scheduledCount+' alarm(s) scheduled in the next '+ALARM_DAYS+' days. ':'')+(bad.length?'Fix the items below so alarms always ring.':'All permissions look good.');
@@ -347,7 +348,6 @@ $('#sDot').addEventListener('input',e=>{fillRng();S.dot=+e.target.value;$('#sDot
 $('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
 document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
 $('#sAlarms').addEventListener('change',e=>{S.alarms=e.target.checked;savePrefs();pushAlarms()});
-$('#alarmTest').onclick=()=>TGNative.testAlarm(10).then(()=>toast('Test alarm','Rings in 10 seconds. Lock the phone to test properly.')).catch(()=>{});
 $('#sLine').addEventListener('change',e=>{S.line=e.target.checked;savePrefs();drawPlot()});
 $('#sDefMonth').addEventListener('change',e=>{S.defMonth=e.target.checked;savePrefs()});
 $('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePrefs()});
@@ -419,7 +419,7 @@ function subscribe(){
 function unsubscribe(){if(sb&&channel){sb.removeChannel(channel);channel=null}}
 window.addEventListener('online',()=>{refreshStatus();queueSync()});
 window.addEventListener('offline',refreshStatus);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){queueSync();tick();refreshClock()}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){queueSync();tick();refreshClock();queueAlarms()}});
 window.addEventListener('focus',()=>{refreshClock();tick()});
 
 /* account dialog */

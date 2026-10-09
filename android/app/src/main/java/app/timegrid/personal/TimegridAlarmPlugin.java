@@ -71,6 +71,7 @@ public class TimegridAlarmPlugin extends Plugin {
             fullScreen = ctx.getSystemService(NotificationManager.class).canUseFullScreenIntent();
         }
         ret.put("fullScreenAllowed", fullScreen);
+        ret.put("overlayAllowed", Settings.canDrawOverlays(ctx));
         ret.put("notificationsAllowed", NotificationManagerCompat.from(ctx).areNotificationsEnabled());
         PowerManager pm = ctx.getSystemService(PowerManager.class);
         ret.put("batteryOptimizationIgnored", pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
@@ -89,6 +90,8 @@ public class TimegridAlarmPlugin extends Plugin {
             i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, pkgUri);
         } else if ("fullScreen".equals(page) && Build.VERSION.SDK_INT >= 34) {
             i = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, pkgUri);
+        } else if ("overlay".equals(page)) {
+            i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri);
         } else if ("notifications".equals(page) && Build.VERSION.SDK_INT >= 26) {
             i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg);
         } else {
