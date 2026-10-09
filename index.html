@@ -147,6 +147,7 @@
       <label class="tgl"><span>No battery limits<small>Stops Android from delaying or blocking alarms</small></span><input type="checkbox" id="sBattery" role="switch"><span class="sw"></span></label>
       <div class="row"><span class="hint" style="margin:0">Alarm sound: <b id="alarmSoundName">…</b></span><button class="btn sm" id="alarmSound">Change</button></div>
       <div class="row" id="alarmFix"></div>
+      <button class="btn sm" id="setupOpen">Setup guide</button>
     </section>
     <section class="sset">
       <h4>Theme</h4>
@@ -169,6 +170,16 @@
       <div id="accBody"></div>
     </section>
     <div class="actions" style="margin-top:12px"><span></span><button class="btn" id="accClose">Close</button></div>
+  </div>
+</div>
+<!-- First-run setup (Android app only) -->
+<div class="scrim" id="setupScrim">
+  <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+    <h3 id="setupTitle">Set up reminders</h3>
+    <p class="hint">Timegrid rings like an alarm clock. Android needs a few permissions for that. Tap each item and allow it; a ✓ shows when it is done.</p>
+    <div id="setupSteps"></div>
+    <p class="hint" id="setupNote"></p>
+    <div class="actions" style="margin-top:12px"><span></span><button class="btn primary" id="setupDone">Done</button></div>
   </div>
 </div>
 <div id="toasts" aria-live="polite"></div>

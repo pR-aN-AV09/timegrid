@@ -220,3 +220,10 @@ button.status:hover{border-color:var(--accent)}
 .datepick{position:relative;display:inline-flex;align-items:center;cursor:pointer;overflow:hidden}
 .datepick input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;cursor:pointer}
 .datepick input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+
+/* first-run setup steps */
+.sstep{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg)}
+.sstep b{display:block;font-size:14px}
+.sstep small{display:block;color:var(--muted);font-size:12px;line-height:1.35;margin-top:2px}
+.sstep .btn{flex:none}
+.sstep .ok{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#2e9d5b;color:#fff;font-weight:700}

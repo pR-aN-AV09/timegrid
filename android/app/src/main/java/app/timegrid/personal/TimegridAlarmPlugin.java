@@ -107,6 +107,25 @@ public class TimegridAlarmPlugin extends Plugin {
         ret.put("batteryOptimizationIgnored", pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
         ret.put("scheduledCount", AlarmStore.load(ctx).length());
         ret.put("soundName", soundName(ctx));
+        // Phone brand, so the setup screen can show the right extra tip (e.g. Xiaomi "Autostart").
+        ret.put("maker", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase());
+        call.resolve(ret);
+    }
+
+    /** Android's own "Allow Timegrid to send you notifications?" pop-up (Android 13+). */
+    @PluginMethod
+    public void requestNotifications(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "notificationsAnswered");
+        } else {
+            notificationsAnswered(call);
+        }
+    }
+
+    @PermissionCallback
+    private void notificationsAnswered(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
         call.resolve(ret);
     }
 

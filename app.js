@@ -15,10 +15,10 @@ let tasks=ls('tg_tasks',[]);           // includes deleted tombstones (needed fo
 let dirty=new Set(ls('tg_dirty',[]));  // ids waiting to upload
 let fired=ls('tg_fired',{});
 const prefs=ls('tg_prefs',{});
-const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,alarms:prefs.alarms!==false,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1),follow:true,calFollow:true};
+const S={scale:prefs.scale??1,minPri:prefs.minPri??1,dot:prefs.dotSize||null,defMonth:!!prefs.defMonth,defYear:!!prefs.defYear,line:prefs.line!==false,alarms:prefs.alarms!==false,setupDone:!!prefs.setupDone,theme:prefs.theme||'',anchor:new Date(),calM:new Date(new Date().getFullYear(),new Date().getMonth(),1),follow:true,calFollow:true};
 const live=()=>tasks.filter(t=>!t.deleted);
 const persist=()=>{ss('tg_tasks',tasks);ss('tg_dirty',[...dirty]);queueAlarms()};
-const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear,line:S.line,alarms:S.alarms});
+const savePrefs=()=>ss('tg_prefs',{scale:S.scale,minPri:S.minPri,theme:S.theme,dotSize:S.dot,defMonth:S.defMonth,defYear:S.defYear,line:S.line,alarms:S.alarms,setupDone:S.setupDone});
 function applyTheme(v){const r=document.documentElement;if(v)r.dataset.theme=v;else delete r.dataset.theme}
 applyTheme(S.theme);
 
@@ -377,9 +377,48 @@ async function refreshAlarmUI(){
   $('#alarmFix').innerHTML=bad.map(b=>`<button class="btn sm" data-page="${b[0]}">${b[1]}</button>`).join('');
   $('#alarmFix').querySelectorAll('button').forEach(b=>b.onclick=()=>TGNative.openSettings(b.dataset.page).finally(refreshAlarmUI));
 }
+/* ---- first-run setup: walks through the permissions alarms need (Android app only) ---- */
+// Brands known to stop background apps unless "Autostart" / background activity is allowed.
+const STRICT_BRANDS=['xiaomi','redmi','poco','oppo','realme','vivo','iqoo','oneplus','huawei','honor','meizu','asus','tecno','infinix','itel','lenovo','motorola'];
+let setupBusy=false;
+async function drawSetup(){
+  let st={};try{st=await TGNative.getStatus()}catch(e){}
+  const steps=[
+    {ok:st.notificationsAllowed!==false,t:'Notifications',d:'Lets reminders show and ring.',
+      go:async()=>{const r=await TGNative.requestNotifications().catch(()=>null);if(!r||!r.granted)await TGNative.openSettings('notifications')}},
+    st.exactAlarmAllowed===false&&{ok:false,t:'Alarms on time',d:'Lets reminders ring at the exact minute.',go:()=>TGNative.openSettings('exactAlarm')},
+    {ok:st.fullScreenAllowed!==false,t:'Full-screen alarm',d:'Shows the alarm over the lock screen.',go:()=>TGNative.openSettings('fullScreen')},
+    {ok:st.overlayAllowed!==false,t:'Appear on top',d:'Lets the alarm take over the screen while you use the phone. Switch Timegrid on in the list.',go:()=>TGNative.openSettings('overlay')},
+    {ok:st.batteryOptimizationIgnored!==false,t:'No battery limits',d:'Stops Android from delaying or blocking alarms. Tap Allow in the pop-up.',go:()=>TGNative.openSettings('batteryRequest')}
+  ].filter(Boolean);
+  if(STRICT_BRANDS.some(b=>(st.maker||'').includes(b)))
+    steps.push({ok:null,b:'Open',t:'Autostart',d:'This phone brand may also block alarms. In App info, turn on "Autostart" or "Allow background activity" for Timegrid.',go:()=>TGNative.openSettings('appInfo')});
+  if(cloudConfigured)steps.push({ok:!!session,b:'Open',opt:1,t:'Account (optional)',d:'Sign in or create an account to back up your tasks.',go:()=>{$('#status').click()}});
+  $('#setupSteps').innerHTML=steps.map((x,i)=>`<div class="sstep"><div><b>${x.t}</b><small>${x.d}</small></div>${x.ok?'<span class="ok" aria-label="Done">✓</span>':`<button class="btn sm ${x.ok===false?'primary':''}" data-i="${i}">${x.b||'Allow'}</button>`}</div>`).join('');
+  $('#setupSteps').querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+    if(setupBusy)return;setupBusy=true;
+    try{await steps[+b.dataset.i].go()}catch(e){}finally{setupBusy=false}
+    if(layer===$('#setupScrim'))drawSetup();refreshAlarmUI();
+  });
+  const left=steps.filter(x=>x.ok===false&&!x.opt).length;
+  $('#setupNote').textContent=left?`${left} item${left>1?'s':''} still to allow. Alarms may not ring reliably until ${left>1?'they are':'it is'} done. You can come back here any time: Settings → Phone alarms → Setup guide.`
+    :'All set. Reminders will ring like an alarm clock. You can see this again in Settings → Phone alarms → Setup guide.';
+}
+function openSetup(){
+  if(!(window.TGNative&&TGNative.available))return;
+  S.setupDone=true;savePrefs(); // shown once by itself; after that from Settings
+  drawSetup();showLayer($('#setupScrim'));
+}
+$('#setupDone').onclick=()=>{if(layer===$('#setupScrim'))hideLayer()};
+$('#setupOpen').onclick=openSetup;
+// Coming back from an Android settings page: refresh the ticks.
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&layer===$('#setupScrim'))drawSetup()});
+
 /* ================= settings window ================= */
 function updateNotifBtn(){
   const st=$('#notifState'),en=$('#notifEnable'),te=$('#notifTest');
+  // In the Android app, Phone alarms (and the setup guide) handle notifications instead.
+  if(window.TGNative&&TGNative.available){st.closest('.sset').hidden=true;return}
   if(!('Notification' in window)){st.textContent='This browser does not support notifications. In-app alerts still work.';en.style.display='none';te.style.display='none';return}
   const p=Notification.permission;
   en.style.display=p==='default'?'':'none';te.style.display=p==='granted'?'':'none';
@@ -580,6 +619,7 @@ function refreshClock(){
 let lastBeat=Date.now();
 setInterval(()=>{const gap=Date.now()-lastBeat;lastBeat=Date.now();refreshClock();if(gap>90000){tick();queueSync()}},30000);  // a long gap means the PC slept
 buildRng();syncSliders();render();updateNotifBtn();refreshStatus();tick();queueAlarms();
+if(!S.setupDone)openSetup();
 setInterval(tick,20000);
 setInterval(drawTodayRem,60000);
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}))}
