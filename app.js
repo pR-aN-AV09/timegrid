@@ -294,7 +294,8 @@ function tick(){
   allReminders().forEach(r=>{
     if(r.at>now||fired[r.key])return;
     fired[r.key]=1;changed=true;
-    if(now-r.at>2*3600e3)return;
+    // In the Android app the phone alarm already rang (and was slid off): no catch-up pop-up.
+    if(now-r.at>2*3600e3||nativeAlarmsOn())return;
     const msg=`Priority ${r.task.priority} · due ${r.task.date} ${r.task.time||''}`;
     const title='Reminder: '+(r.task.title||'Untitled');
     toast(title,msg,true);systemNotify(title,msg);
