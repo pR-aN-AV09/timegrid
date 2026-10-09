@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any app file so installed copies refresh.
-const VERSION = 'timegrid-v11';
+const VERSION = 'timegrid-v12';
 const SHELL = ['./','./index.html','./styles.css','./app.js','./native.js','./config.js','./vendor/supabase.js',
   './manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 

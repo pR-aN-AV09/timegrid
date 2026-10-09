@@ -311,12 +311,12 @@ async function refreshAlarmUI(){
   const bad=[];
   if(st.exactAlarmAllowed===false)bad.push(['exactAlarm','Allow exact alarms']);
   if(st.fullScreenAllowed===false)bad.push(['fullScreen','Allow full-screen alerts']);
-  if(st.overlayAllowed===false)bad.push(['overlay','Allow alarm screen over other apps']);
   if(st.notificationsAllowed===false)bad.push(['notifications','Allow notifications']);
-  if(st.batteryOptimizationIgnored===false)bad.push(['battery','Remove battery limits']);
+  $('#sOverlay').checked=st.overlayAllowed!==false;
+  $('#sBattery').checked=st.batteryOptimizationIgnored!==false;
   $('#alarmState').textContent=(st.scheduledCount!=null?st.scheduledCount+' alarm(s) scheduled in the next '+ALARM_DAYS+' days. ':'')+(bad.length?'Fix the items below so alarms always ring.':'All permissions look good.');
   $('#alarmFix').innerHTML=bad.map(b=>`<button class="btn sm" data-page="${b[0]}">${b[1]}</button>`).join('');
-  $('#alarmFix').querySelectorAll('button').forEach(b=>b.onclick=()=>TGNative.openSettings(b.dataset.page));
+  $('#alarmFix').querySelectorAll('button').forEach(b=>b.onclick=()=>TGNative.openSettings(b.dataset.page).finally(refreshAlarmUI));
 }
 /* ================= settings window ================= */
 function updateNotifBtn(){
@@ -348,6 +348,9 @@ $('#sDot').addEventListener('input',e=>{fillRng();S.dot=+e.target.value;$('#sDot
 $('#sDotReset').onclick=()=>{S.dot=null;savePrefs();syncSettings();drawPlot()};
 document.querySelectorAll('input[name=theme]').forEach(r=>r.addEventListener('change',e=>{S.theme=e.target.value;applyTheme(S.theme);savePrefs()}));
 $('#sAlarms').addEventListener('change',e=>{S.alarms=e.target.checked;savePrefs();pushAlarms()});
+// Android won't let an app flip these itself: show the real state and open the system page/pop-up instead.
+$('#sOverlay').addEventListener('change',e=>{e.target.checked=!e.target.checked;TGNative.openSettings('overlay').finally(refreshAlarmUI)});
+$('#sBattery').addEventListener('change',e=>{const on=e.target.checked;e.target.checked=!on;TGNative.openSettings(on?'batteryRequest':'battery').finally(refreshAlarmUI)});
 $('#sLine').addEventListener('change',e=>{S.line=e.target.checked;savePrefs();drawPlot()});
 $('#sDefMonth').addEventListener('change',e=>{S.defMonth=e.target.checked;savePrefs()});
 $('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePrefs()});
@@ -355,7 +358,7 @@ $('#sDefYear').addEventListener('change',e=>{S.defYear=e.target.checked;savePref
 /* ================= cloud sync (Supabase) ================= */
 const CFG=window.TG_CONFIG||{};
 const cloudConfigured=!!(CFG.url&&CFG.anonKey&&!/YOUR_/.test(CFG.url+CFG.anonKey)&&window.supabase);
-let sb=null,session=null,channel=null,syncTimer=null,syncing=false;
+let sb=null,session=null,channel=null,syncTimer=null,syncing=false,retryN=0,retryTimer=null;
 if(cloudConfigured){sb=window.supabase.createClient(CFG.url,CFG.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}})}
 
 function setStatus(kind,text){
@@ -404,9 +407,13 @@ async function syncNow(){
     persist();
     if(changed)render();
     setStatus('ok','Synced');
+    retryN=0;clearTimeout(retryTimer);
   }catch(err){
     console.error('sync failed',err);
-    setStatus('err','Sync problem');
+    // Often the network is only half back (e.g. right after reconnecting): try again by itself.
+    const wait=[5,15,30,60][Math.min(retryN++,3)];
+    clearTimeout(retryTimer);retryTimer=setTimeout(syncNow,wait*1000);
+    setStatus('err','Sync problem · retrying');
   }finally{syncing=false}
 }
 function subscribe(){

@@ -8,12 +8,15 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationManagerCompat;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
@@ -25,6 +28,30 @@ import com.getcapacitor.annotation.PermissionCallback;
 )
 public class TimegridAlarmPlugin extends Plugin {
     static final int TEST_ALARM_ID = 0; // web alarm ids are always >= 1
+
+    /** Replaces all alarms with the list from the web app (rolling ~14-day window). */
+    @PluginMethod
+    public void schedule(PluginCall call) {
+        JSArray alarms = call.getArray("alarms", new JSArray());
+        if (!AlarmScheduler.canScheduleExact(getContext())) {
+            call.reject("Exact alarms are not allowed for Timegrid");
+            return;
+        }
+        try {
+            int n = AlarmScheduler.replaceAll(getContext(), alarms);
+            JSObject ret = new JSObject();
+            ret.put("scheduled", n);
+            call.resolve(ret);
+        } catch (SecurityException e) {
+            call.reject("Exact alarms are not allowed for Timegrid", e);
+        }
+    }
+
+    @PluginMethod
+    public void cancelAll(PluginCall call) {
+        AlarmScheduler.cancelAll(getContext());
+        call.resolve();
+    }
 
     @PluginMethod
     public void testAlarm(PluginCall call) {
@@ -75,7 +102,7 @@ public class TimegridAlarmPlugin extends Plugin {
         ret.put("notificationsAllowed", NotificationManagerCompat.from(ctx).areNotificationsEnabled());
         PowerManager pm = ctx.getSystemService(PowerManager.class);
         ret.put("batteryOptimizationIgnored", pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
-        ret.put("scheduledCount", 0); // real count arrives with schedule() in the next step
+        ret.put("scheduledCount", AlarmStore.load(ctx).length());
         call.resolve(ret);
     }
 
@@ -94,17 +121,23 @@ public class TimegridAlarmPlugin extends Plugin {
             i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, pkgUri);
         } else if ("notifications".equals(page) && Build.VERSION.SDK_INT >= 26) {
             i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg);
+        } else if ("batteryRequest".equals(page)) {
+            // Android's own "Let app always run in background? Allow / Deny" pop-up.
+            i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkgUri);
         } else {
             // Battery (and fallback): the app's info page, where Samsung has Battery > Unrestricted.
             i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri);
         }
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // Resolves when the user comes back, so the page can refresh its switches.
         try {
-            ctx.startActivity(i);
+            startActivityForResult(call, i, "settingsClosed");
         } catch (Exception e) {
-            ctx.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            startActivityForResult(call, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri), "settingsClosed");
         }
+    }
+
+    @ActivityCallback
+    private void settingsClosed(PluginCall call, ActivityResult result) {
         call.resolve();
     }
 }
