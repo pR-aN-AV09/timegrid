@@ -24,10 +24,22 @@ BootReceiver, MainActivity (registers plugin; Back calls window.tgBack()).
 - Known gap the owner accepted: after a phone restart, alarms are reliably back once the app has been opened.
 - Build/install from the shell: see the memory notes (JDK 21 via D:\gradle\gradle.properties, adb install -r).
 
-## Next (owner deciding, see end of 2026-10-09 session)
-1. Tester-ready version: signed release APK (keep the keystore out of git and backed up), first-run
-   permission setup screen, proper app icon/name/splash. 2. Share with 2-3 testers + feedback form.
-3. UI/UX redesign (owner will share references/Figma; offer mockups before changing code).
+## Tester release 1.0-beta (2026-10-10): built, installed and tested on the owner's phone
+- Signed with D:\timegrid-keys (timegrid-release.jks + keystore.properties; outside git, owner backs it up).
+  app/build.gradle reads it; `gradlew assembleRelease` -> copy to D:\timegrid-release\Timegrid-<version>.apk.
+  For each tester update bump versionCode (+1) and versionName; same key, testers install over the old app.
+  Debug and release builds have different signatures: switching needs an uninstall.
+- Owner kept the default Capacitor icon (white launch screen); a redesigned icon comes with the UI redesign.
+- Added: first-run setup guide (native only; Settings > Phone alarms > Setup guide; test-alarm button stays
+  hidden by owner's choice), notification permission pop-up, number wheels (frequency 0-20, days 0-30),
+  forgot-password (email link opens the web app, which shows a "new password" box), dashboard date picker,
+  reminders card follows the dashboard's selected day, sync pill opens Account and sync.
+- Supabase: "Confirm email" off; Site URL / redirect = https://pr-an-av09.github.io/timegrid/.
+- Tester texts: D:\timegrid-release\Tester-instructions.txt and Feedback-form-questions.txt.
+
+## Next
+1. Share with 2-3 testers + Google Form; collect feedback.
+2. UI/UX redesign (owner will share references/Figma; offer mockups before changing code).
 
 ## Rules
 - Do not change the web UI/behaviour in a normal browser; native code paths must be no-ops there.
